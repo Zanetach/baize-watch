@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+.env.local
+firmware/.pio/
+
+# Local firmware secrets.
+firmware/include/secrets.h
+server/agent-status.json

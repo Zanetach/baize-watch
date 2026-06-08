@@ -1,0 +1,30 @@
+{
+  "name": "stopwatch-desktop-monitor",
+  "version": "0.1.0",
+  "private": false,
+  "description": "Desktop status monitor service for the M5Stack StopWatch.",
+  "type": "module",
+  "bin": {
+    "stopwatch-monitor": "bin/stopwatch-monitor.js"
+  },
+  "files": [
+    "bin/",
+    "server/index.js",
+    "server/cli.js",
+    "server/stt.js",
+    "server/trends.js",
+    "server/voice.js",
+    "server/agent-status.example.json",
+    "server/public/",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node bin/stopwatch-monitor.js start",
+    "service": "node bin/stopwatch-monitor.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test server/*.test.js"
+  },
+  "dependencies": {
+    "ws": "^8.17.1"
+  }
+}

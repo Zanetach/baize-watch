@@ -1,0 +1,35 @@
+{
+  "codex": {
+    "online": true,
+    "state": "running",
+    "task": "Implement desktop monitor",
+    "progress": 45,
+    "tokens": {
+      "used": 42000,
+      "limit": 200000
+    },
+    "trends": {
+      "usage": {
+        "total": 42000,
+        "points": [1200, 1800, 2600, 4000, 5200, 7000, 8500, 9700, 13000, 18000, 25000, 42000]
+      },
+      "weekly": {
+        "total": 188000,
+        "points": [9000, 12000, 18000, 21000, 26000, 24000, 30000, 34000, 28000, 32000, 36000, 42000]
+      }
+    },
+    "updatedAt": "2026-06-08T13:00:00.000Z"
+  },
+  "claude": {
+    "online": false,
+    "state": "idle",
+    "task": "",
+    "progress": null,
+    "tokens": {
+      "used": null,
+      "limit": null,
+      "percent": null
+    },
+    "updatedAt": null
+  }
+}

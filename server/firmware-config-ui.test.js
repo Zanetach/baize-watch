@@ -289,7 +289,7 @@ test("firmware auto-finalizes conversation turns and exports the session from id
   const handleRecording = firmwareSource.match(/void handleVoiceRecording\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
 
   assert.match(firmwareSource, /VOICE_DICTATION_SILENCE_STOP_MS = 1800/);
-  assert.match(firmwareSource, /VOICE_CONVERSATION_SILENCE_STOP_MS = 1600/);
+  assert.match(firmwareSource, /VOICE_CONVERSATION_SILENCE_STOP_MS = 1000/);
   assert.match(firmwareSource, /VOICE_CONVERSATION_SILENCE_STOP_MS/);
   assert.match(firmwareSource, /void exportVoiceConversation\(\)/);
   assert.match(firmwareSource, /voice_export/);

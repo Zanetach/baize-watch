@@ -135,6 +135,7 @@ MONITOR_ALIYUN_TTS_MODEL=cosyvoice-v3-flash
 MONITOR_ALIYUN_TTS_VOICE=longwanjun_v3
 MONITOR_ALIYUN_TTS_SAMPLE_RATE=16000
 MONITOR_ALIYUN_TTS_VOLUME=100
+MONITOR_TTS_CHUNK_BYTES=4096
 MONITOR_TTS_GAIN=4.8
 MONITOR_DEVICE_WAKE_CUE=0
 MONITOR_WAKE_GREETING=我是傻妞，你的智能秘书。
@@ -166,6 +167,7 @@ Quality settings:
 | `MONITOR_ASSISTANT_MAX_TOKENS` | `40` | Keep continuous voice replies short so chat and TTS return faster |
 | `MONITOR_VOICE_MIN_RECORDING_MS` | `900` | Reject accidental very short recordings before ASR |
 | `MONITOR_VOICE_MIN_RMS` | `0` | Optional quiet-audio gate; keep `0` unless diagnostics show very low RMS |
+| `MONITOR_TTS_CHUNK_BYTES` | `4096` | Send larger PCM chunks to reduce device WebSocket message overhead |
 | `MONITOR_TTS_GAIN` | `4.8` | Boost StopWatch speaker PCM output before sending audio chunks |
 | `MONITOR_DEVICE_WAKE_CUE` | `0` | Use cloud TTS for the wake greeting; set `1` for a faster local cue |
 | `MONITOR_WAKE_TTS_GAIN` | `4.8` | Separate gain for the wake greeting |

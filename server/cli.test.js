@@ -50,6 +50,7 @@ test("CLI module renders default native Doubao ASR environment without leaking a
   assert.match(envFile, /MONITOR_ALIYUN_TTS_MODEL=cosyvoice-v3-flash/);
   assert.match(envFile, /MONITOR_ALIYUN_TTS_VOICE=longwanjun_v3/);
   assert.match(envFile, /MONITOR_ALIYUN_TTS_VOLUME=100/);
+  assert.match(envFile, /MONITOR_TTS_CHUNK_BYTES=4096/);
   assert.match(envFile, /MONITOR_TTS_GAIN=4\.8/);
   assert.match(envFile, /MONITOR_DEVICE_WAKE_CUE=0/);
   assert.match(envFile, /MONITOR_WAKE_GREETING=我是傻妞，你的智能秘书。/);

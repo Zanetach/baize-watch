@@ -47,6 +47,7 @@ export function buildDefaultEnvFile({ apiKey = process.env.DASHSCOPE_API_KEY || 
     "MONITOR_ALIYUN_TTS_VOICE=longwanjun_v3",
     "MONITOR_ALIYUN_TTS_SAMPLE_RATE=16000",
     "MONITOR_ALIYUN_TTS_VOLUME=100",
+    "MONITOR_TTS_CHUNK_BYTES=4096",
     "MONITOR_TTS_GAIN=4.8",
     "MONITOR_DEVICE_WAKE_CUE=0",
     "MONITOR_WAKE_GREETING=我是傻妞，你的智能秘书。",

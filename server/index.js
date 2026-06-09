@@ -78,7 +78,7 @@ const voiceDebugAudioDir = String(process.env.MONITOR_VOICE_DEBUG_AUDIO_DIR || "
 const assistantEnabled = parseBooleanEnv(process.env.MONITOR_ASSISTANT_ENABLED, true);
 const focusedDictationEnabled = parseBooleanEnv(process.env.MONITOR_FOCUSED_DICTATION, true);
 const ttsProvider = String(process.env.MONITOR_TTS_PROVIDER || "aliyun").trim().toLowerCase();
-const ttsChunkBytes = Number.parseInt(process.env.MONITOR_TTS_CHUNK_BYTES || "2048", 10);
+const ttsChunkBytes = Number.parseInt(process.env.MONITOR_TTS_CHUNK_BYTES || "4096", 10);
 const ttsGain = Number.parseFloat(process.env.MONITOR_TTS_GAIN || "4.8");
 const wakeTtsGain = Number.parseFloat(process.env.MONITOR_WAKE_TTS_GAIN || "4.8");
 const wakeTtsVolume = Number.parseInt(process.env.MONITOR_WAKE_TTS_VOLUME || "100", 10);
@@ -539,7 +539,7 @@ async function speakToDevice(text, speechOptions = {}) {
       ...speech,
       text
     }, {
-      chunkBytes: Number.isFinite(ttsChunkBytes) && ttsChunkBytes > 0 ? ttsChunkBytes : 2048,
+      chunkBytes: Number.isFinite(ttsChunkBytes) && ttsChunkBytes > 0 ? ttsChunkBytes : 4096,
       gain: selectedGain,
       after: speechOptions.after,
       agent: speechOptions.agent

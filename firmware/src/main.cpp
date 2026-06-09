@@ -4,6 +4,9 @@
 #include <M5Unified.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
+#include <WiFiUdp.h>
+#include <math.h>
+#include <mbedtls/base64.h>
 #include "agent_logos.h"
 
 #if __has_include("secrets.h")
@@ -62,6 +65,13 @@ struct VoiceStatus {
   String agent = "codex";
   String text = "";
   String error = "";
+  bool deviceWakeCue = false;
+  uint32_t asrLatencyMs = 0;
+  bool hasAsrLatency = false;
+  unsigned long asrTranscribingStartedAt = 0;
+  uint32_t assistantElapsedMs = 0;
+  bool hasAssistantElapsed = false;
+  unsigned long assistantThinkingStartedAt = 0;
 };
 
 enum class UiMode {
@@ -84,6 +94,7 @@ struct ConfigMenuItem {
 };
 
 WebsocketsClient client;
+WiFiUDP discoveryUdp;
 MonitorStatus status;
 AgentStatus codex("Codex");
 AgentStatus claude("Claude Code");
@@ -110,9 +121,19 @@ unsigned long lastHeartbeat = 0;
 unsigned long lastVoiceButtonPress = 0;
 unsigned long lastVoiceAnimationFrame = 0;
 unsigned long lastDashboardAnimationFrame = 0;
+unsigned long voiceRecordingStartedAt = 0;
+unsigned long lastVoiceSpeechAt = 0;
 int lastVoiceButtonIndex = -1;
 unsigned long lastTouchHandled = 0;
+bool voiceSawSpeech = false;
 bool needsFullRedraw = true;
+bool voiceSessionActive = false;
+bool voiceConversationMode = false;
+bool voiceSendPending = false;
+unsigned long voiceSendPendingAt = 0;
+bool agentSwitchPending = false;
+unsigned long agentSwitchPendingAt = 0;
+String currentMonitorWsUrl = MONITOR_WS_URL;
 
 constexpr uint16_t COLOR_BG = 0x0841;
 constexpr uint16_t COLOR_PANEL = 0x18E3;
@@ -128,11 +149,24 @@ constexpr uint16_t COLOR_RING_DIM = 0x2104;
 constexpr uint16_t COLOR_RING_TRACK = 0x39E7;
 constexpr uint32_t VOICE_SAMPLE_RATE = 16000;
 constexpr size_t VOICE_CHUNK_SAMPLES = 320;
+constexpr uint32_t TTS_SAMPLE_RATE_DEFAULT = 16000;
+constexpr size_t TTS_AUDIO_BUFFER_SAMPLES = 2048;
+constexpr uint8_t TTS_SPEAKER_VOLUME = 255;
+constexpr int TTS_SPEAKER_CHANNEL = 0;
+constexpr uint32_t WAKE_CUE_SAMPLE_RATE = 16000;
+constexpr size_t WAKE_CUE_SAMPLES = 960;
+constexpr int16_t WAKE_CUE_AMPLITUDE = 7600;
 constexpr unsigned long VOICE_DOUBLE_PRESS_MS = 450;
-constexpr unsigned long VOICE_MAX_RECORDING_MS = 30000;
+constexpr unsigned long VOICE_MAX_RECORDING_MS = 120000;
+constexpr unsigned long VOICE_DICTATION_SILENCE_STOP_MS = 1800;
+constexpr unsigned long VOICE_CONVERSATION_SILENCE_STOP_MS = 1600;
+constexpr int32_t VOICE_SPEECH_RMS_THRESHOLD = 420;
 constexpr unsigned long VOICE_ANIMATION_MS = 140;
 constexpr unsigned long DASHBOARD_ANIMATION_MS = 360;
 constexpr unsigned long LOGO_ANIMATION_MS = 180;
+constexpr uint16_t DISCOVERY_PORT = 8788;
+constexpr unsigned long DISCOVERY_TIMEOUT_MS = 1400;
+constexpr const char* DISCOVERY_REQUEST = "stopwatch-monitor-discover-v1";
 constexpr const char* KEYBOARD_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.@#$%&*!?+/";
 constexpr const char* KEYBOARD_PAGES[] = {
   "abcdefghijklm",
@@ -190,7 +224,7 @@ constexpr int32_t CONFIG_MESSAGE_Y = 398;
 constexpr int32_t WIFI_LIST_MESSAGE_Y = 400;
 
 const ConfigMenuItem CONFIG_MENU[] = {
-  {"Reconnect", ConfigAction::ReconnectServer},
+  {"Device WS", ConfigAction::ReconnectServer},
   {"Wi-Fi setup", ConfigAction::WifiSetup},
   {"Wi-Fi portal", ConfigAction::WifiPortal},
   {"Exit config", ConfigAction::Exit}
@@ -201,6 +235,12 @@ M5Canvas screenCanvas(&M5.Display);
 LovyanGFX* drawTarget = &M5.Display;
 bool screenCanvasReady = false;
 int16_t voiceAudioBuffer[VOICE_CHUNK_SAMPLES];
+int16_t ttsAudioBuffer[TTS_AUDIO_BUFFER_SAMPLES];
+int16_t wakeCueBuffer[WAKE_CUE_SAMPLES];
+uint32_t ttsSampleRate = TTS_SAMPLE_RATE_DEFAULT;
+bool ttsPlaybackActive = false;
+String ttsAfterAction = "";
+String ttsAfterAgent = "codex";
 
 void connectWiFi();
 bool connectStoredWiFi(unsigned long timeoutMs);
@@ -212,6 +252,7 @@ void scanWiFiNetworks();
 bool isKnownWifiSsid(const String& ssid, size_t count);
 void connectSelectedWiFi();
 void connectWebSocket();
+String discoverMonitorWebSocketUrl(unsigned long timeoutMs = DISCOVERY_TIMEOUT_MS);
 void drawBootScreen(const String& line);
 void drawStatus();
 void drawMetricArc(int32_t x, int32_t y, int32_t r, int value, uint16_t color, const String& label);
@@ -236,6 +277,8 @@ void drawUsageWindowFooterItem(int32_t y, const String& label, int percent, cons
 void drawVoiceIndicator(uint16_t accent);
 void drawMicGlyph(int32_t centerX, int32_t centerY, uint16_t color);
 void drawCheckGlyph(int32_t centerX, int32_t centerY, uint16_t color);
+String voiceLatencyText();
+String assistantLatencyText();
 void handleButtons();
 void handleTouchInput();
 void handleConfigButtons(bool leftPressed, bool rightPressed, bool held);
@@ -273,13 +316,32 @@ int keyboardKeyAt(int32_t x, int32_t y);
 bool pointInRect(int32_t px, int32_t py, int32_t x, int32_t y, int32_t w, int32_t h);
 bool isWiFiSetupMode();
 void handleVoiceRecording();
-void startVoiceRecording(int agentIndex);
+uint32_t voiceChunkRms(const int16_t* samples, size_t count);
+void wakeVoiceAssistant(int agentIndex);
+void exitVoiceSession();
+void playWakeCue();
+void startVoiceRecording(int agentIndex, bool announce, const char* mode = "continue");
 void stopVoiceRecording();
+void exportVoiceConversation();
 void sendVoiceTranscript();
+void scheduleVoiceSend();
+void cancelPendingVoiceSend();
+void handlePendingVoiceSend();
+void scheduleAgentSwitch();
+void cancelPendingAgentSwitch();
+void handlePendingAgentSwitch();
+void toggleActiveAgent();
 void drawCenteredText(const String& text, int32_t y, const lgfx::IFont* font, uint16_t color);
 void handleMessage(WebsocketsMessage message);
 void handleEvent(WebsocketsEvent event, String data);
 void parseStatus(JsonDocument& doc);
+void handleVoiceContinue(JsonVariant source);
+void handleTtsStart(JsonVariant source);
+void handleTtsAudio(JsonVariant source);
+void handleTtsDone();
+size_t decodeTtsAudio(const String& encoded);
+void waitForTtsPlaybackSlot();
+bool waitForTtsPlaybackStart(unsigned long timeoutMs = 80);
 void parseAgent(JsonVariant source, AgentStatus& target, const String& fallbackName);
 void resetAgentMetrics(AgentStatus& target);
 void parseTrend(JsonVariant source, uint64_t& total, bool& hasTotal, uint64_t* points, size_t& count);
@@ -293,6 +355,7 @@ String compactTokenCount(uint64_t value, bool available);
 uint16_t colorForPercent(int value);
 const AgentStatus& activeAgent();
 String agentKey(int agentIndex);
+int agentIndexForKey(const String& agent);
 
 void setup() {
   auto config = M5.config();
@@ -337,6 +400,8 @@ void loop() {
 
   client.poll();
 
+  handlePendingVoiceSend();
+  handlePendingAgentSwitch();
   handleButtons();
   handleTouchInput();
   handleVoiceRecording();
@@ -518,11 +583,27 @@ void connectSelectedWiFi() {
 
 void connectWebSocket() {
   lastConnectAttempt = millis();
+  drawBootScreen("Finding server");
+  String discoveredUrl = discoverMonitorWebSocketUrl();
+  if (discoveredUrl.length() > 0) {
+    currentMonitorWsUrl = discoveredUrl;
+  } else if (currentMonitorWsUrl.length() == 0) {
+    currentMonitorWsUrl = MONITOR_WS_URL;
+  }
+
   drawBootScreen("Connecting");
   Serial.print("Connecting to ");
-  Serial.println(MONITOR_WS_URL);
+  Serial.println(currentMonitorWsUrl);
 
-  websocketConnected = client.connect(MONITOR_WS_URL);
+  websocketConnected = client.connect(currentMonitorWsUrl);
+  if (!websocketConnected && currentMonitorWsUrl != String(MONITOR_WS_URL)) {
+    Serial.println("Discovered WebSocket failed; trying firmware fallback.");
+    currentMonitorWsUrl = MONITOR_WS_URL;
+    Serial.print("Connecting to ");
+    Serial.println(currentMonitorWsUrl);
+    websocketConnected = client.connect(currentMonitorWsUrl);
+  }
+
   if (!websocketConnected) {
     drawBootScreen("No server");
     Serial.println("WebSocket connection failed.");
@@ -534,6 +615,56 @@ void connectWebSocket() {
   needsFullRedraw = true;
 }
 
+String discoverMonitorWebSocketUrl(unsigned long timeoutMs) {
+  if (WiFi.status() != WL_CONNECTED) {
+    return "";
+  }
+
+  if (!discoveryUdp.begin(0)) {
+    Serial.println("Discovery UDP bind failed.");
+    return "";
+  }
+
+  discoveryUdp.beginPacket(IPAddress(255, 255, 255, 255), DISCOVERY_PORT);
+  discoveryUdp.write(reinterpret_cast<const uint8_t*>(DISCOVERY_REQUEST), strlen(DISCOVERY_REQUEST));
+  discoveryUdp.endPacket();
+
+  const unsigned long startedAt = millis();
+  while (millis() - startedAt < timeoutMs) {
+    const int packetSize = discoveryUdp.parsePacket();
+    if (packetSize <= 0) {
+      delay(20);
+      continue;
+    }
+
+    char buffer[256];
+    const int length = discoveryUdp.read(buffer, min(packetSize, int(sizeof(buffer) - 1)));
+    if (length <= 0) {
+      continue;
+    }
+    buffer[length] = '\0';
+
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, buffer);
+    if (error) {
+      continue;
+    }
+
+    const String type = doc["type"] | "";
+    const String wsUrl = doc["wsUrl"] | "";
+    if (type == "stopwatch_monitor" && wsUrl.startsWith("ws://")) {
+      discoveryUdp.stop();
+      Serial.print("Discovered monitor: ");
+      Serial.println(wsUrl);
+      return wsUrl;
+    }
+  }
+
+  discoveryUdp.stop();
+  Serial.println("Monitor discovery timed out.");
+  return "";
+}
+
 void handleMessage(WebsocketsMessage message) {
   JsonDocument doc;
   DeserializationError error = deserializeJson(doc, message.data());
@@ -541,6 +672,24 @@ void handleMessage(WebsocketsMessage message) {
   if (error) {
     Serial.print("JSON parse failed: ");
     Serial.println(error.c_str());
+    return;
+  }
+
+  String type = doc["type"] | "";
+  if (type == "tts_start") {
+    handleTtsStart(doc);
+    return;
+  }
+  if (type == "tts_audio") {
+    handleTtsAudio(doc);
+    return;
+  }
+  if (type == "tts_done") {
+    handleTtsDone();
+    return;
+  }
+  if (type == "voice_continue") {
+    handleVoiceContinue(doc);
     return;
   }
 
@@ -562,6 +711,129 @@ void handleEvent(WebsocketsEvent event, String data) {
   if (data.length() > 0) {
     Serial.println(data);
   }
+}
+
+void handleTtsStart(JsonVariant source) {
+  if (M5.Mic.isEnabled()) {
+    while (M5.Mic.isRecording()) {
+      M5.delay(1);
+    }
+    M5.Mic.end();
+  }
+
+  ttsSampleRate = source["sampleRate"] | TTS_SAMPLE_RATE_DEFAULT;
+  if (ttsSampleRate == 0) {
+    ttsSampleRate = TTS_SAMPLE_RATE_DEFAULT;
+  }
+  ttsAfterAction = source["after"] | "";
+  ttsAfterAgent = source["agent"] | voiceStatus.agent;
+
+  M5.Speaker.begin();
+  M5.Speaker.setVolume(TTS_SPEAKER_VOLUME);
+  M5.Speaker.setAllChannelVolume(255);
+  M5.Speaker.stop(TTS_SPEAKER_CHANNEL);
+  Serial.printf("tts_start sampleRate=%lu\n", static_cast<unsigned long>(ttsSampleRate));
+  M5.delay(40);
+  ttsPlaybackActive = true;
+  voiceStatus.state = "speaking";
+  voiceStatus.error = "";
+  voiceStatus.hasAssistantElapsed = false;
+  voiceStatus.assistantElapsedMs = 0;
+  voiceStatus.assistantThinkingStartedAt = 0;
+  needsFullRedraw = true;
+}
+
+void handleTtsAudio(JsonVariant source) {
+  if (!ttsPlaybackActive) {
+    handleTtsStart(source);
+  }
+
+  String encoded = source["audio"] | "";
+  if (encoded.length() == 0) return;
+
+  waitForTtsPlaybackSlot();
+  size_t decodedBytes = decodeTtsAudio(encoded);
+  decodedBytes -= decodedBytes % 2;
+  if (decodedBytes == 0) return;
+
+  const size_t sampleCount = decodedBytes / sizeof(int16_t);
+  const bool queued = M5.Speaker.playRaw(ttsAudioBuffer, sampleCount, ttsSampleRate, false, 1, TTS_SPEAKER_CHANNEL, false);
+  Serial.printf(
+    "tts_audio encoded=%u decoded=%u samples=%u queued=%d\n",
+    static_cast<unsigned>(encoded.length()),
+    static_cast<unsigned>(decodedBytes),
+    static_cast<unsigned>(sampleCount),
+    queued ? 1 : 0
+  );
+  if (!queued || !waitForTtsPlaybackStart()) {
+    voiceStatus.state = "error";
+    voiceStatus.error = "speaker";
+    needsFullRedraw = true;
+  }
+}
+
+void handleTtsDone() {
+  if (ttsPlaybackActive) {
+    waitForTtsPlaybackSlot();
+    M5.Speaker.end();
+  }
+  Serial.println("tts_done");
+  ttsPlaybackActive = false;
+
+  if (ttsAfterAction == "listen" && websocketConnected) {
+    voiceSessionActive = true;
+    voiceConversationMode = true;
+    startVoiceRecording(agentIndexForKey(ttsAfterAgent), false, "continue");
+    ttsAfterAction = "";
+    ttsAfterAgent = "codex";
+    return;
+  }
+
+  ttsAfterAction = "";
+  ttsAfterAgent = "codex";
+  if (voiceStatus.state == "speaking") {
+    voiceStatus.state = "idle";
+  }
+  needsFullRedraw = true;
+}
+
+void handleVoiceContinue(JsonVariant source) {
+  if (!websocketConnected) return;
+  const String agent = source["agent"] | voiceStatus.agent;
+  voiceSessionActive = true;
+  voiceConversationMode = true;
+  startVoiceRecording(agentIndexForKey(agent), false, "continue");
+}
+
+size_t decodeTtsAudio(const String& encoded) {
+  size_t decodedBytes = 0;
+  const int result = mbedtls_base64_decode(
+    reinterpret_cast<unsigned char*>(ttsAudioBuffer),
+    sizeof(ttsAudioBuffer),
+    &decodedBytes,
+    reinterpret_cast<const unsigned char*>(encoded.c_str()),
+    encoded.length()
+  );
+  return result == 0 ? decodedBytes : 0;
+}
+
+void waitForTtsPlaybackSlot() {
+  while (M5.Speaker.isPlaying(TTS_SPEAKER_CHANNEL)) {
+    M5.update();
+    M5.delay(1);
+  }
+}
+
+bool waitForTtsPlaybackStart(unsigned long timeoutMs) {
+  const unsigned long startedAt = millis();
+  while (millis() - startedAt < timeoutMs) {
+    if (M5.Speaker.isPlaying(TTS_SPEAKER_CHANNEL)) {
+      return true;
+    }
+    M5.update();
+    M5.delay(1);
+  }
+  return M5.Speaker.isPlaying(TTS_SPEAKER_CHANNEL);
 }
 
 void parseStatus(JsonDocument& doc) {
@@ -611,6 +883,37 @@ void parseVoice(JsonVariant source) {
   voiceStatus.agent = source["agent"] | voiceStatus.agent;
   voiceStatus.text = source["text"] | "";
   voiceStatus.error = source["error"] | "";
+  if (!source["deviceWakeCue"].isNull()) {
+    voiceStatus.deviceWakeCue = source["deviceWakeCue"].as<bool>();
+  }
+
+  if (!source["asr"]["latencyMs"].isNull()) {
+    voiceStatus.asrLatencyMs = source["asr"]["latencyMs"].as<uint32_t>();
+    voiceStatus.hasAsrLatency = true;
+  } else if (!source["asr"]["elapsedMs"].isNull()) {
+    voiceStatus.asrLatencyMs = source["asr"]["elapsedMs"].as<uint32_t>();
+    voiceStatus.hasAsrLatency = true;
+  }
+
+  if (voiceStatus.state == "transcribing" && voiceStatus.asrTranscribingStartedAt == 0) {
+    voiceStatus.asrTranscribingStartedAt = millis();
+  } else if (voiceStatus.state != "transcribing") {
+    voiceStatus.asrTranscribingStartedAt = 0;
+  }
+
+  if (!source["assistant"]["elapsedMs"].isNull()) {
+    voiceStatus.assistantElapsedMs = source["assistant"]["elapsedMs"].as<uint32_t>();
+    voiceStatus.hasAssistantElapsed = true;
+    if (voiceStatus.state == "thinking") {
+      voiceStatus.assistantThinkingStartedAt = millis();
+    }
+  } else if (voiceStatus.state == "thinking" && voiceStatus.assistantThinkingStartedAt == 0) {
+    voiceStatus.assistantThinkingStartedAt = millis();
+  } else if (voiceStatus.state != "thinking") {
+    voiceStatus.hasAssistantElapsed = false;
+    voiceStatus.assistantElapsedMs = 0;
+    voiceStatus.assistantThinkingStartedAt = 0;
+  }
 }
 
 void handleButtons() {
@@ -618,10 +921,27 @@ void handleButtons() {
   const bool rightPressed = M5.BtnB.wasPressed();
   const bool leftHeld = M5.BtnA.wasHold();
   const bool rightHeld = M5.BtnB.wasHold();
-  if (!leftPressed && !rightPressed && !leftHeld && !rightHeld) return;
+  const bool leftReleased = M5.BtnA.wasReleased();
+  const bool leftReleasedAfterHold = M5.BtnA.wasReleasedAfterHold();
+  if (!leftPressed && !rightPressed && !leftHeld && !rightHeld && !leftReleased && !leftReleasedAfterHold) return;
 
   if (voiceStatus.state == "recording") {
-    stopVoiceRecording();
+    if (leftPressed && voiceSessionActive && !voiceSawSpeech) {
+      exportVoiceConversation();
+      return;
+    }
+    if (leftPressed) {
+      stopVoiceRecording();
+      return;
+    }
+    if (rightHeld || leftReleasedAfterHold) {
+      exitVoiceSession();
+      return;
+    }
+    return;
+  }
+
+  if (voiceStatus.state == "speaking" || voiceStatus.state == "transcribing" || voiceStatus.state == "thinking") {
     return;
   }
 
@@ -641,12 +961,13 @@ void handleButtons() {
   }
 
   if (leftHeld || rightHeld) {
+    cancelPendingVoiceSend();
+    cancelPendingAgentSwitch();
     enterConfigScreen();
     return;
   }
 
-  if (rightPressed && voiceStatus.state == "ready") {
-    sendVoiceTranscript();
+  if (!leftPressed && !rightPressed) {
     return;
   }
 
@@ -654,17 +975,39 @@ void handleButtons() {
   const unsigned long now = millis();
   const bool doublePressed = lastVoiceButtonIndex == buttonIndex && now - lastVoiceButtonPress <= VOICE_DOUBLE_PRESS_MS;
 
-  activeAgentIndex = buttonIndex;
-  needsFullRedraw = true;
+  if (voiceSendPending && !doublePressed) {
+    cancelPendingVoiceSend();
+  }
+  if (agentSwitchPending && !doublePressed) {
+    cancelPendingAgentSwitch();
+  }
 
   if (doublePressed) {
+    cancelPendingVoiceSend();
+    cancelPendingAgentSwitch();
     lastVoiceButtonIndex = -1;
     lastVoiceButtonPress = 0;
-    startVoiceRecording(buttonIndex);
+    if (buttonIndex == 0) {
+      needsFullRedraw = true;
+      startVoiceRecording(activeAgentIndex, false, "dictate");
+      return;
+    }
+    needsFullRedraw = true;
+    wakeVoiceAssistant(activeAgentIndex);
     return;
   }
 
-  lastVoiceButtonIndex = buttonIndex;
+  if (rightPressed && voiceStatus.state == "ready") {
+    scheduleVoiceSend();
+    return;
+  }
+
+  if (leftPressed) {
+    scheduleAgentSwitch();
+    return;
+  }
+
+  lastVoiceButtonIndex = rightPressed ? 1 : -1;
   lastVoiceButtonPress = now;
 }
 
@@ -709,29 +1052,172 @@ void handleVoiceRecording() {
 
   if (M5.Mic.record(voiceAudioBuffer, VOICE_CHUNK_SAMPLES, VOICE_SAMPLE_RATE, false)) {
     client.sendBinary(reinterpret_cast<const char*>(voiceAudioBuffer), sizeof(voiceAudioBuffer));
+    const uint32_t rms = voiceChunkRms(voiceAudioBuffer, VOICE_CHUNK_SAMPLES);
+    if (rms >= VOICE_SPEECH_RMS_THRESHOLD) {
+      voiceSawSpeech = true;
+      lastVoiceSpeechAt = millis();
+    }
   }
 
-  if (millis() - lastVoiceButtonPress > VOICE_MAX_RECORDING_MS) {
+  const unsigned long silenceStopMs = voiceConversationMode
+    ? VOICE_CONVERSATION_SILENCE_STOP_MS
+    : VOICE_DICTATION_SILENCE_STOP_MS;
+  if (voiceSawSpeech && millis() - lastVoiceSpeechAt > silenceStopMs) {
+    stopVoiceRecording();
+    return;
+  }
+
+  if (millis() - voiceRecordingStartedAt > VOICE_MAX_RECORDING_MS) {
     stopVoiceRecording();
   }
 }
 
-void startVoiceRecording(int agentIndex) {
+uint32_t voiceChunkRms(const int16_t* samples, size_t count) {
+  if (samples == nullptr || count == 0) return 0;
+
+  uint64_t sumSquares = 0;
+  for (size_t i = 0; i < count; i++) {
+    const int32_t sample = samples[i];
+    sumSquares += uint64_t(sample * sample);
+  }
+
+  return static_cast<uint32_t>(sqrt(double(sumSquares) / double(count)));
+}
+
+void wakeVoiceAssistant(int agentIndex) {
   if (!websocketConnected) return;
 
+  cancelPendingVoiceSend();
+  cancelPendingAgentSwitch();
   activeAgentIndex = agentIndex;
+  voiceSessionActive = true;
+  voiceConversationMode = true;
+  voiceStatus.state = "speaking";
+  voiceStatus.agent = agentKey(agentIndex);
+  voiceStatus.text = "";
+  voiceStatus.error = "";
+  voiceStatus.hasAsrLatency = false;
+  voiceStatus.asrLatencyMs = 0;
+  voiceStatus.asrTranscribingStartedAt = 0;
+  voiceStatus.hasAssistantElapsed = false;
+  voiceStatus.assistantElapsedMs = 0;
+  voiceStatus.assistantThinkingStartedAt = 0;
+
+  if (M5.Mic.isEnabled()) {
+    while (M5.Mic.isRecording()) {
+      M5.delay(1);
+    }
+    M5.Mic.end();
+  }
+
+  client.send("{\"type\":\"voice_wake\",\"agent\":\"" + voiceStatus.agent + "\"}");
+  if (voiceStatus.deviceWakeCue) {
+    playWakeCue();
+    startVoiceRecording(agentIndex, false, "continue");
+  }
+  needsFullRedraw = true;
+}
+
+void exitVoiceSession() {
+  cancelPendingVoiceSend();
+  cancelPendingAgentSwitch();
+  voiceSessionActive = false;
+  voiceConversationMode = false;
+  ttsAfterAction = "";
+
+  if (M5.Mic.isEnabled()) {
+    while (M5.Mic.isRecording()) {
+      M5.delay(1);
+    }
+    M5.Mic.end();
+  }
+
+  M5.Speaker.stop(TTS_SPEAKER_CHANNEL);
+  M5.Speaker.end();
+  voiceStatus.state = "idle";
+  voiceStatus.text = "";
+  voiceStatus.error = "";
+  voiceStatus.hasAsrLatency = false;
+  voiceStatus.asrLatencyMs = 0;
+  voiceStatus.asrTranscribingStartedAt = 0;
+  voiceStatus.hasAssistantElapsed = false;
+  voiceStatus.assistantElapsedMs = 0;
+  voiceStatus.assistantThinkingStartedAt = 0;
+
+  if (websocketConnected) {
+    client.send("{\"type\":\"voice_exit\",\"agent\":\"" + voiceStatus.agent + "\"}");
+  }
+  needsFullRedraw = true;
+}
+
+void playWakeCue() {
+  const double twoPi = 6.283185307179586;
+  for (size_t i = 0; i < WAKE_CUE_SAMPLES; i++) {
+    const double phase = double(i) / double(WAKE_CUE_SAMPLE_RATE);
+    const double frequency = i < WAKE_CUE_SAMPLES / 2 ? 880.0 : 1174.66;
+    double envelope = 1.0;
+    if (i < 80) {
+      envelope = double(i) / 80.0;
+    } else if (i > WAKE_CUE_SAMPLES - 160) {
+      envelope = double(WAKE_CUE_SAMPLES - i) / 160.0;
+    }
+    wakeCueBuffer[i] = static_cast<int16_t>(sin(twoPi * frequency * phase) * WAKE_CUE_AMPLITUDE * envelope);
+  }
+
+  M5.Speaker.begin();
+  M5.Speaker.setVolume(TTS_SPEAKER_VOLUME);
+  M5.Speaker.setAllChannelVolume(255);
+  M5.Speaker.stop(TTS_SPEAKER_CHANNEL);
+  const bool queued = M5.Speaker.playRaw(
+    wakeCueBuffer,
+    WAKE_CUE_SAMPLES,
+    WAKE_CUE_SAMPLE_RATE,
+    false,
+    1,
+    TTS_SPEAKER_CHANNEL,
+    false
+  );
+  if (queued && waitForTtsPlaybackStart(30)) {
+    waitForTtsPlaybackSlot();
+  }
+  M5.Speaker.end();
+}
+
+void startVoiceRecording(int agentIndex, bool announce, const char* mode) {
+  if (announce) {
+    wakeVoiceAssistant(agentIndex);
+    return;
+  }
+
+  if (!websocketConnected) return;
+
+  cancelPendingVoiceSend();
+  cancelPendingAgentSwitch();
+  activeAgentIndex = agentIndex;
+  const bool continueMode = String(mode) == "continue";
+  voiceSessionActive = continueMode;
+  voiceConversationMode = continueMode;
   voiceStatus.state = "recording";
   voiceStatus.agent = agentKey(agentIndex);
   voiceStatus.text = "";
   voiceStatus.error = "";
+  voiceStatus.hasAsrLatency = false;
+  voiceStatus.asrLatencyMs = 0;
+  voiceStatus.asrTranscribingStartedAt = 0;
+  voiceStatus.hasAssistantElapsed = false;
+  voiceStatus.assistantElapsedMs = 0;
+  voiceStatus.assistantThinkingStartedAt = 0;
   lastVoiceButtonPress = millis();
+  voiceRecordingStartedAt = lastVoiceButtonPress;
+  lastVoiceSpeechAt = voiceRecordingStartedAt;
+  voiceSawSpeech = false;
 
   M5.Speaker.end();
   if (!M5.Mic.isEnabled()) {
     M5.Mic.begin();
   }
 
-  client.send("{\"type\":\"voice_start\",\"agent\":\"" + voiceStatus.agent + "\"}");
+  client.send("{\"type\":\"voice_start\",\"agent\":\"" + voiceStatus.agent + "\",\"mode\":\"" + String(mode) + "\"}");
   needsFullRedraw = true;
 }
 
@@ -744,13 +1230,113 @@ void stopVoiceRecording() {
   }
 
   voiceStatus.state = "transcribing";
+  voiceStatus.asrTranscribingStartedAt = millis();
+  voiceStatus.hasAsrLatency = false;
+  voiceStatus.asrLatencyMs = 0;
+  voiceStatus.hasAssistantElapsed = false;
+  voiceStatus.assistantElapsedMs = 0;
+  voiceStatus.assistantThinkingStartedAt = 0;
+  if (!voiceConversationMode) {
+    voiceSessionActive = false;
+  }
   client.send("{\"type\":\"voice_stop\"}");
   needsFullRedraw = true;
 }
 
+void exportVoiceConversation() {
+  if (M5.Mic.isEnabled()) {
+    while (M5.Mic.isRecording()) {
+      M5.delay(1);
+    }
+    M5.Mic.end();
+  }
+
+  voiceSessionActive = false;
+  voiceConversationMode = false;
+  voiceSawSpeech = false;
+  voiceStatus.state = "transcribing";
+  voiceStatus.asrTranscribingStartedAt = millis();
+  voiceStatus.hasAsrLatency = false;
+  voiceStatus.asrLatencyMs = 0;
+  voiceStatus.hasAssistantElapsed = false;
+  voiceStatus.assistantElapsedMs = 0;
+  voiceStatus.assistantThinkingStartedAt = 0;
+  client.send("{\"type\":\"voice_export\",\"agent\":\"" + voiceStatus.agent + "\"}");
+  needsFullRedraw = true;
+}
+
 void sendVoiceTranscript() {
+  cancelPendingVoiceSend();
+  cancelPendingAgentSwitch();
   client.send("{\"type\":\"voice_send\"}");
   voiceStatus.state = "idle";
+  needsFullRedraw = true;
+}
+
+void scheduleVoiceSend() {
+  cancelPendingAgentSwitch();
+  voiceSendPending = true;
+  voiceSendPendingAt = millis();
+  lastVoiceButtonIndex = 1;
+  lastVoiceButtonPress = voiceSendPendingAt;
+}
+
+void cancelPendingVoiceSend() {
+  voiceSendPending = false;
+  voiceSendPendingAt = 0;
+}
+
+void handlePendingVoiceSend() {
+  if (!voiceSendPending) return;
+
+  if (voiceStatus.state != "ready") {
+    cancelPendingVoiceSend();
+    return;
+  }
+
+  if (millis() - voiceSendPendingAt < VOICE_DOUBLE_PRESS_MS) {
+    return;
+  }
+
+  cancelPendingVoiceSend();
+  lastVoiceButtonIndex = -1;
+  lastVoiceButtonPress = 0;
+  sendVoiceTranscript();
+}
+
+void scheduleAgentSwitch() {
+  cancelPendingVoiceSend();
+  agentSwitchPending = true;
+  agentSwitchPendingAt = millis();
+  lastVoiceButtonIndex = 0;
+  lastVoiceButtonPress = agentSwitchPendingAt;
+}
+
+void cancelPendingAgentSwitch() {
+  agentSwitchPending = false;
+  agentSwitchPendingAt = 0;
+}
+
+void handlePendingAgentSwitch() {
+  if (!agentSwitchPending) return;
+
+  if (voiceStatus.state != "idle") {
+    cancelPendingAgentSwitch();
+    return;
+  }
+
+  if (millis() - agentSwitchPendingAt < VOICE_DOUBLE_PRESS_MS) {
+    return;
+  }
+
+  cancelPendingAgentSwitch();
+  lastVoiceButtonIndex = -1;
+  lastVoiceButtonPress = 0;
+  toggleActiveAgent();
+}
+
+void toggleActiveAgent() {
+  activeAgentIndex = activeAgentIndex == 0 ? 1 : 0;
   needsFullRedraw = true;
 }
 
@@ -957,12 +1543,12 @@ void exitConfigScreen() {
 void performConfigAction(ConfigAction action) {
   switch (action) {
     case ConfigAction::ReconnectServer:
-      configMessage = "Reconnecting server";
+      configMessage = "Reconnecting WS";
       websocketConnected = false;
       client.close();
       connectWebSocket();
       uiMode = UiMode::Config;
-      configMessage = websocketConnected ? "Server connected" : "Server offline";
+      configMessage = websocketConnected ? "Device WS connected" : "Device WS offline";
       needsFullRedraw = true;
       break;
     case ConfigAction::WifiSetup:
@@ -1163,7 +1749,7 @@ void drawConfigStatusPanel() {
   const uint16_t serverColor = websocketConnected ? COLOR_GREEN : COLOR_RED;
   drawConfigStatusRow("Wi-Fi", WiFi.status() == WL_CONNECTED ? WiFi.SSID() : "disconnected", CONFIG_STATUS_TOP + 20, wifiColor);
   drawConfigStatusRow("IP", WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "--", CONFIG_STATUS_TOP + 45);
-  drawConfigStatusRow("Server", websocketConnected ? "connected" : "offline", CONFIG_STATUS_TOP + 70, serverColor);
+  drawConfigStatusRow("Device WS", websocketConnected ? "connected" : "offline", CONFIG_STATUS_TOP + 70, serverColor);
   drawConfigStatusRow("Voice", voiceStatus.state, CONFIG_STATUS_TOP + 95, voiceStatus.state == "error" ? COLOR_RED : COLOR_TEXT);
 }
 
@@ -1285,8 +1871,6 @@ void drawPasswordInputPanel() {
 }
 
 void drawPasswordDeleteButton() {
-  drawTarget->fillRoundRect(PASSWORD_DELETE_LEFT, PASSWORD_DELETE_TOP, PASSWORD_DELETE_WIDTH, PASSWORD_DELETE_HEIGHT, 8, COLOR_BG);
-  drawTarget->drawRoundRect(PASSWORD_DELETE_LEFT, PASSWORD_DELETE_TOP, PASSWORD_DELETE_WIDTH, PASSWORD_DELETE_HEIGHT, 8, COLOR_YELLOW);
   drawTarget->setTextDatum(middle_center);
   drawTarget->setFont(&fonts::Font2);
   drawTarget->setTextColor(COLOR_YELLOW, COLOR_BG);
@@ -1393,6 +1977,7 @@ void drawAgentStateRing(const AgentStatus& agent, uint16_t accent) {
   const bool voiceAgent = isVoiceStateForAgent(agent);
   const bool recording = voiceAgent && voiceStatus.state == "recording";
   const bool transcribing = voiceAgent && voiceStatus.state == "transcribing";
+  const bool thinking = voiceAgent && voiceStatus.state == "thinking";
   const bool ready = voiceAgent && voiceStatus.state == "ready";
   const bool error = voiceAgent && voiceStatus.state == "error";
 
@@ -1418,6 +2003,13 @@ void drawAgentStateRing(const AgentStatus& agent, uint16_t accent) {
     const int32_t outer = 223 + pulse;
     drawTarget->drawArc(233, 233, outer, outer - 4, -215, 215, accent);
     drawTarget->drawArc(233, 233, outer - 7, outer - 10, -155, 155, COLOR_CYAN);
+    return;
+  }
+
+  if (thinking) {
+    const int32_t segmentStart = -220 + int32_t((millis() / VOICE_ANIMATION_MS) % 12) * 36;
+    drawTarget->drawArc(233, 233, 225, 221, segmentStart, segmentStart + 44, COLOR_VIOLET);
+    drawTarget->drawArc(233, 233, 218, 216, segmentStart - 30, segmentStart + 16, COLOR_YELLOW);
     return;
   }
 
@@ -1641,13 +2233,16 @@ void drawVoiceIndicator(uint16_t accent) {
   const int32_t cx = 233;
   const int32_t cy = 190;
   const int phase = (millis() / VOICE_ANIMATION_MS) % 8;
+  const bool waking = voiceStatus.state == "speaking";
+  const bool thinking = voiceStatus.state == "thinking";
 
   if (voiceStatus.state == "ready") {
     drawCheckGlyph(cx, cy, COLOR_GREEN);
   } else if (voiceStatus.state == "error") {
     drawMicGlyph(cx, cy, COLOR_MUTED);
-  } else if (voiceStatus.state == "recording" || voiceStatus.state == "transcribing") {
-    const uint16_t waveColor = voiceStatus.state == "recording" ? accent : COLOR_YELLOW;
+  } else if (waking || voiceStatus.state == "recording" || voiceStatus.state == "transcribing" || thinking) {
+    const uint16_t progressColor = voiceStatus.state == "thinking" ? COLOR_VIOLET : COLOR_YELLOW;
+    const uint16_t waveColor = (thinking || voiceStatus.state == "transcribing") ? progressColor : accent;
     drawMicGlyph(cx, cy, COLOR_MUTED);
     for (int i = 0; i < 5; i++) {
       const int height = 6 + ((phase + i * 2) % 5) * 3;
@@ -1657,6 +2252,18 @@ void drawVoiceIndicator(uint16_t accent) {
     }
   } else {
     drawMicGlyph(cx, cy, COLOR_MUTED);
+  }
+
+  if (voiceStatus.state == "thinking" && (voiceStatus.assistantThinkingStartedAt > 0 || voiceStatus.hasAssistantElapsed)) {
+    drawTarget->setTextDatum(middle_center);
+    drawTarget->setFont(&fonts::Font2);
+    drawTarget->setTextColor(COLOR_VIOLET, COLOR_BG);
+    drawTarget->drawString("AI " + assistantLatencyText(), cx, cy + 42);
+  } else if ((voiceStatus.state == "transcribing" && voiceStatus.asrTranscribingStartedAt > 0) || voiceStatus.hasAsrLatency) {
+    drawTarget->setTextDatum(middle_center);
+    drawTarget->setFont(&fonts::Font2);
+    drawTarget->setTextColor(voiceStatus.state == "transcribing" ? COLOR_YELLOW : COLOR_MUTED, COLOR_BG);
+    drawTarget->drawString("ASR " + voiceLatencyText(), cx, cy + 42);
   }
 }
 
@@ -1673,6 +2280,40 @@ void drawCheckGlyph(int32_t centerX, int32_t centerY, uint16_t color) {
   drawTarget->drawLine(centerX - 4, centerY + 10, centerX + 14, centerY - 12, color);
   drawTarget->drawLine(centerX - 13, centerY + 1, centerX - 4, centerY + 11, color);
   drawTarget->drawLine(centerX - 4, centerY + 11, centerX + 14, centerY - 11, color);
+}
+
+String voiceLatencyText() {
+  uint32_t elapsedMs = voiceStatus.asrLatencyMs;
+  if (voiceStatus.state == "transcribing" && voiceStatus.asrTranscribingStartedAt > 0) {
+    elapsedMs = static_cast<uint32_t>(millis() - voiceStatus.asrTranscribingStartedAt);
+  }
+
+  if (elapsedMs < 1000) {
+    return String(elapsedMs) + "ms";
+  }
+
+  if (elapsedMs < 10000) {
+    return String(double(elapsedMs) / 1000.0, 1) + "s";
+  }
+
+  return String(elapsedMs / 1000) + "s";
+}
+
+String assistantLatencyText() {
+  uint32_t elapsedMs = voiceStatus.assistantElapsedMs;
+  if (voiceStatus.state == "thinking" && voiceStatus.assistantThinkingStartedAt > 0) {
+    elapsedMs += static_cast<uint32_t>(millis() - voiceStatus.assistantThinkingStartedAt);
+  }
+
+  if (elapsedMs < 1000) {
+    return String(elapsedMs) + "ms";
+  }
+
+  if (elapsedMs < 10000) {
+    return String(double(elapsedMs) / 1000.0, 1) + "s";
+  }
+
+  return String(elapsedMs / 1000) + "s";
 }
 
 void drawCenteredText(const String& text, int32_t y, const lgfx::IFont* font, uint16_t color) {
@@ -1794,4 +2435,8 @@ const AgentStatus& activeAgent() {
 
 String agentKey(int agentIndex) {
   return agentIndex == 0 ? "codex" : "claude";
+}
+
+int agentIndexForKey(const String& agent) {
+  return agent == "claude" ? 1 : 0;
 }

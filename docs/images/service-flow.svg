@@ -1,55 +1,73 @@
 <svg width="1280" height="520" viewBox="0 0 1280 520" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
+    <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
       <stop stop-color="#111827"/>
       <stop offset="1" stop-color="#0B1120"/>
     </linearGradient>
-    <linearGradient id="wire" x1="128" y1="260" x2="1120" y2="260">
+    <linearGradient id="wire" x1="112" y1="262" x2="1168" y2="262" gradientUnits="userSpaceOnUse">
       <stop stop-color="#F59E0B"/>
-      <stop offset="0.45" stop-color="#38BDF8"/>
+      <stop offset="0.35" stop-color="#38BDF8"/>
+      <stop offset="0.68" stop-color="#22C55E"/>
       <stop offset="1" stop-color="#A78BFA"/>
     </linearGradient>
+    <filter id="drop" x="-15%" y="-20%" width="130%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#000000" flood-opacity="0.34"/>
+    </filter>
   </defs>
+
   <rect width="1280" height="520" rx="40" fill="#070A12"/>
-  <path d="M160 260H1120" stroke="url(#wire)" stroke-width="8" stroke-linecap="round"/>
-  <g stroke="#334155" stroke-width="2" fill="url(#card)" font-family="Inter, Arial, sans-serif">
-    <rect x="72" y="130" width="232" height="260" rx="28"/>
-    <rect x="374" y="130" width="232" height="260" rx="28"/>
-    <rect x="676" y="130" width="232" height="260" rx="28"/>
-    <rect x="978" y="130" width="232" height="260" rx="28"/>
+  <circle cx="120" cy="74" r="230" fill="#1D4ED8" opacity="0.14"/>
+  <circle cx="1188" cy="472" r="270" fill="#7C3AED" opacity="0.14"/>
+  <path d="M146 262H1134" stroke="url(#wire)" stroke-width="8" stroke-linecap="round"/>
+
+  <g filter="url(#drop)" stroke="#334155" stroke-width="2" fill="url(#panel)">
+    <rect x="66" y="122" width="226" height="278" rx="28"/>
+    <rect x="364" y="122" width="226" height="278" rx="28"/>
+    <rect x="662" y="122" width="226" height="278" rx="28"/>
+    <rect x="960" y="122" width="254" height="278" rx="28"/>
   </g>
+
   <g font-family="Inter, Arial, sans-serif">
-    <text x="188" y="188" text-anchor="middle" fill="#F8FAFC" font-size="26" font-weight="800">StopWatch</text>
-    <text x="188" y="228" text-anchor="middle" fill="#CBD5E1" font-size="18">ESP32-S3 firmware</text>
-    <text x="188" y="258" text-anchor="middle" fill="#CBD5E1" font-size="18">round AMOLED UI</text>
-    <text x="188" y="288" text-anchor="middle" fill="#CBD5E1" font-size="18">button voice control</text>
-    <circle cx="188" cy="333" r="28" fill="#111827" stroke="#38BDF8" stroke-width="4"/>
-    <path d="M176 334L185 344L202 321" stroke="#E0F2FE" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="179" y="178" text-anchor="middle" fill="#F8FAFC" font-size="26" font-weight="850">StopWatch</text>
+    <text x="179" y="218" text-anchor="middle" fill="#CBD5E1" font-size="18">ESP32-S3 firmware</text>
+    <text x="179" y="248" text-anchor="middle" fill="#CBD5E1" font-size="18">round AMOLED UI</text>
+    <text x="179" y="278" text-anchor="middle" fill="#CBD5E1" font-size="18">mic + speaker</text>
+    <text x="179" y="308" text-anchor="middle" fill="#CBD5E1" font-size="18">button voice modes</text>
+    <rect x="118" y="338" width="122" height="36" rx="12" fill="#0F172A" stroke="#38BDF8"/>
+    <text x="179" y="362" text-anchor="middle" fill="#E0F2FE" font-size="17" font-weight="800">/device WS</text>
 
-    <text x="490" y="188" text-anchor="middle" fill="#F8FAFC" font-size="26" font-weight="800">Node Service</text>
-    <text x="490" y="228" text-anchor="middle" fill="#CBD5E1" font-size="18">HTTP preview</text>
-    <text x="490" y="258" text-anchor="middle" fill="#CBD5E1" font-size="18">WebSocket /device</text>
-    <text x="490" y="288" text-anchor="middle" fill="#CBD5E1" font-size="18">local token readers</text>
-    <rect x="443" y="318" width="94" height="36" rx="12" fill="#0F172A" stroke="#38BDF8"/>
-    <text x="490" y="342" text-anchor="middle" fill="#E0F2FE" font-size="17" font-weight="700">:8787</text>
+    <text x="477" y="178" text-anchor="middle" fill="#F8FAFC" font-size="26" font-weight="850">Node Service</text>
+    <text x="477" y="218" text-anchor="middle" fill="#CBD5E1" font-size="18">HTTP dashboard</text>
+    <text x="477" y="248" text-anchor="middle" fill="#CBD5E1" font-size="18">status aggregation</text>
+    <text x="477" y="278" text-anchor="middle" fill="#CBD5E1" font-size="18">voice session state</text>
+    <text x="477" y="308" text-anchor="middle" fill="#CBD5E1" font-size="18">thinking broadcast</text>
+    <rect x="422" y="338" width="110" height="36" rx="12" fill="#0F172A" stroke="#38BDF8"/>
+    <text x="477" y="362" text-anchor="middle" fill="#E0F2FE" font-size="17" font-weight="800">:8787</text>
 
-    <text x="792" y="188" text-anchor="middle" fill="#F8FAFC" font-size="26" font-weight="800">macOS Runtime</text>
-    <text x="792" y="228" text-anchor="middle" fill="#CBD5E1" font-size="18">LaunchAgent</text>
-    <text x="792" y="258" text-anchor="middle" fill="#CBD5E1" font-size="18">System Events paste</text>
-    <text x="792" y="288" text-anchor="middle" fill="#CBD5E1" font-size="18">Codex / Claude focus</text>
-    <rect x="721" y="318" width="142" height="36" rx="12" fill="#0F172A" stroke="#A78BFA"/>
-    <text x="792" y="342" text-anchor="middle" fill="#EDE9FE" font-size="17" font-weight="700">background</text>
+    <text x="775" y="178" text-anchor="middle" fill="#F8FAFC" font-size="26" font-weight="850">macOS Runtime</text>
+    <text x="775" y="218" text-anchor="middle" fill="#CBD5E1" font-size="18">LaunchAgent</text>
+    <text x="775" y="248" text-anchor="middle" fill="#CBD5E1" font-size="18">Codex / Claude readers</text>
+    <text x="775" y="278" text-anchor="middle" fill="#CBD5E1" font-size="18">System Events paste</text>
+    <text x="775" y="308" text-anchor="middle" fill="#CBD5E1" font-size="18">focused chat detection</text>
+    <rect x="704" y="338" width="142" height="36" rx="12" fill="#0F172A" stroke="#22C55E"/>
+    <text x="775" y="362" text-anchor="middle" fill="#DCFCE7" font-size="17" font-weight="800">local-first</text>
 
-    <text x="1094" y="188" text-anchor="middle" fill="#F8FAFC" font-size="26" font-weight="800">Speech Models</text>
-    <text x="1094" y="228" text-anchor="middle" fill="#CBD5E1" font-size="18">Qwen3 ASR Flash</text>
-    <text x="1094" y="258" text-anchor="middle" fill="#CBD5E1" font-size="18">Fun-ASR fallback</text>
-    <text x="1094" y="288" text-anchor="middle" fill="#CBD5E1" font-size="18">OpenAI optional</text>
-    <rect x="1036" y="318" width="116" height="36" rx="12" fill="#0F172A" stroke="#FBBF24"/>
-    <text x="1094" y="342" text-anchor="middle" fill="#FEF3C7" font-size="17" font-weight="700">transcribe</text>
+    <text x="1087" y="178" text-anchor="middle" fill="#F8FAFC" font-size="26" font-weight="850">Speech Providers</text>
+    <text x="1087" y="218" text-anchor="middle" fill="#CBD5E1" font-size="18">Doubao native ASR 2.0</text>
+    <text x="1087" y="248" text-anchor="middle" fill="#CBD5E1" font-size="18">Aliyun / OpenAI fallback</text>
+    <text x="1087" y="278" text-anchor="middle" fill="#CBD5E1" font-size="18">Doubao Speech TTS</text>
+    <text x="1087" y="308" text-anchor="middle" fill="#CBD5E1" font-size="18">Aliyun CosyVoice TTS</text>
+    <rect x="1015" y="338" width="144" height="36" rx="12" fill="#0F172A" stroke="#A78BFA"/>
+    <text x="1087" y="362" text-anchor="middle" fill="#EDE9FE" font-size="17" font-weight="800">ASR + TTS</text>
   </g>
+
   <g fill="#F8FAFC">
-    <path d="M326 260L346 248V272L326 260Z"/>
-    <path d="M628 260L648 248V272L628 260Z"/>
-    <path d="M930 260L950 248V272L930 260Z"/>
+    <path d="M315 262L337 249V275L315 262Z"/>
+    <path d="M613 262L635 249V275L613 262Z"/>
+    <path d="M911 262L933 249V275L911 262Z"/>
+  </g>
+
+  <g font-family="Inter, Arial, sans-serif">
+    <text x="640" y="456" text-anchor="middle" fill="#94A3B8" font-size="18">LAN discovery: StopWatch broadcasts on UDP 8788, the desktop service replies with the current WebSocket URL.</text>
   </g>
 </svg>

@@ -1,13 +1,49 @@
 import http from "node:http";
 import os from "node:os";
 import { execFile } from "node:child_process";
-import { readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { WebSocketServer } from "ws";
+import { createAssistantResponder } from "./assistant.js";
+import {
+  isConversationVoiceMode,
+  normalizeVoiceMode,
+  normalizeVoiceAgent,
+  shouldAcceptVoiceStart,
+  shouldAcceptVoiceWake,
+  shouldExitConversation,
+  shouldPasteRecognizedSpeech,
+  shouldRepromptAfterEmptyTranscript,
+  shouldSilenceFocusedDictation,
+  shouldUseDeviceWakeCue,
+  speechOptionsForAssistantStatus,
+  voiceStatusWithAssistantProcessing,
+  wakeGreetingText,
+  wakeSpeechOptions
+} from "./assistant-session.js";
+import { sendPcmSpeechToDevices } from "./device-audio.js";
 import { createVoiceController } from "./voice.js";
 import { bucketTokenTrend, normalizeTokenTrend } from "./trends.js";
 import { createTranscribeAudio, resolveSttProvider } from "./stt.js";
+import {
+  createAliyunTtsSynthesizer,
+  createCachedSpeechSynthesizer,
+  createDoubaoTtsSynthesizer
+} from "./tts.js";
+import { createSingleFlightTtlCache } from "./status-cache.js";
+import { buildCodexUsageWindows } from "./usage-windows.js";
+import { agentFreshness } from "./agent-freshness.js";
+import { activationNameForTargetApp, buildPasteScript } from "./app-targets.js";
+import {
+  buildFocusedInputProbeScript,
+  isFocusedTextInput,
+  parseFocusedInputProbe
+} from "./focused-input.js";
+import {
+  createDiscoveryResponder,
+  getLocalAddresses
+} from "./discovery.js";
 
 const execFileAsync = promisify(execFile);
 const defaultAgentStatusFile = fileURLToPath(new URL("./agent-status.json", import.meta.url));
@@ -19,6 +55,7 @@ const logoFiles = new Map([
 ]);
 
 const port = Number.parseInt(process.env.MONITOR_PORT || "8787", 10);
+const discoveryPort = Number.parseInt(process.env.MONITOR_DISCOVERY_PORT || "8788", 10);
 const label = process.env.MONITOR_LABEL || os.hostname();
 const gitRepo = process.env.MONITOR_GIT_REPO || process.cwd();
 const intervalMs = Number.parseInt(process.env.MONITOR_INTERVAL_MS || "1000", 10);
@@ -31,9 +68,28 @@ const claudeTokenLimit = Number.parseInt(process.env.MONITOR_CLAUDE_TOKEN_LIMIT 
 const codexWeeklyTokenLimit = Number.parseInt(process.env.MONITOR_CODEX_WEEKLY_TOKEN_LIMIT || "5000000000", 10);
 const claudeWeeklyTokenLimit = Number.parseInt(process.env.MONITOR_CLAUDE_WEEKLY_TOKEN_LIMIT || "50000000", 10);
 const codexRateLimitCacheMs = 15000;
+const slowStatusCacheMs = Number.parseInt(process.env.MONITOR_STATUS_SLOW_CACHE_MS || "5000", 10);
 const sttModel = process.env.MONITOR_STT_MODEL || "gpt-4o-mini-transcribe";
 const sttProvider = resolveSttProvider(process.env);
 const voiceGain = Number.parseFloat(process.env.MONITOR_VOICE_GAIN || "1.35");
+const voiceMinRecordingMs = Number.parseInt(process.env.MONITOR_VOICE_MIN_RECORDING_MS || "900", 10);
+const voiceMinRms = Number.parseInt(process.env.MONITOR_VOICE_MIN_RMS || "0", 10);
+const voiceDebugAudioDir = String(process.env.MONITOR_VOICE_DEBUG_AUDIO_DIR || "").trim();
+const assistantEnabled = parseBooleanEnv(process.env.MONITOR_ASSISTANT_ENABLED, true);
+const focusedDictationEnabled = parseBooleanEnv(process.env.MONITOR_FOCUSED_DICTATION, true);
+const ttsProvider = String(process.env.MONITOR_TTS_PROVIDER || "aliyun").trim().toLowerCase();
+const ttsChunkBytes = Number.parseInt(process.env.MONITOR_TTS_CHUNK_BYTES || "2048", 10);
+const ttsGain = Number.parseFloat(process.env.MONITOR_TTS_GAIN || "4.8");
+const wakeTtsGain = Number.parseFloat(process.env.MONITOR_WAKE_TTS_GAIN || "4.8");
+const wakeTtsVolume = Number.parseInt(process.env.MONITOR_WAKE_TTS_VOLUME || "100", 10);
+const deviceWakeCue = shouldUseDeviceWakeCue(process.env);
+const displayTimeZone = process.env.MONITOR_DISPLAY_TIME_ZONE ||
+  Intl.DateTimeFormat().resolvedOptions().timeZone ||
+  "Asia/Shanghai";
+const configuredAgentStaleAfterMs = Number.parseInt(process.env.MONITOR_AGENT_STALE_AFTER_MS || "", 10);
+const agentStaleAfterMs = Number.isFinite(configuredAgentStaleAfterMs) && configuredAgentStaleAfterMs > 0
+  ? configuredAgentStaleAfterMs
+  : 2 * 60 * 60 * 1000;
 const usageTrendWindowMs = 5 * 60 * 60 * 1000;
 const weeklyTrendWindowMs = 7 * 24 * 60 * 60 * 1000;
 const trendBucketCount = 12;
@@ -42,15 +98,33 @@ const transcribeAudio = createTranscribeAudio({
   openaiModel: sttModel,
   execFileAsync
 });
+const assistantResponder = createAssistantResponder();
+const baseSynthesizeSpeech = createSpeechSynthesizer(ttsProvider);
+const synthesizeSpeech = baseSynthesizeSpeech ? createCachedSpeechSynthesizer(baseSynthesizeSpeech) : null;
 
 let lastCpuSample = sampleCpu();
 let codexRateLimitCache = { expiresAt: 0, status: {} };
+let deviceSpeechBusyUntilMs = 0;
+let deviceSpeechInFlight = false;
+let assistantTurnInFlight = false;
+let voiceConversationActive = false;
+let activeVoiceMode = "idle";
+let voiceConversationTurns = [];
+let assistantProcessing = { active: false, agent: "codex", startedAt: 0 };
+const slowStatusCache = createSingleFlightTtlCache({
+  ttlMs: Number.isFinite(slowStatusCacheMs) && slowStatusCacheMs > 0 ? slowStatusCacheMs : 5000,
+  load: collectSlowStatus
+});
 const voice = createVoiceController({
   transcribeAudio,
+  onTranscribeAudio: saveDebugVoiceAudio,
   pasteText: pasteIntoFocusedInput,
   pressReturn: pressReturnInFocusedInput,
+  shouldPasteTranscript: shouldPasteVoiceTranscript,
   config: {
-    gain: Number.isFinite(voiceGain) && voiceGain > 0 ? voiceGain : 1
+    gain: Number.isFinite(voiceGain) && voiceGain > 0 ? voiceGain : 1,
+    minRecordingMs: Number.isFinite(voiceMinRecordingMs) && voiceMinRecordingMs > 0 ? voiceMinRecordingMs : 900,
+    minRms: Number.isFinite(voiceMinRms) && voiceMinRms > 0 ? voiceMinRms : 0
   }
 });
 let latestStatus = await collectStatus();
@@ -65,7 +139,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === "/voice") {
-    sendJson(res, { ...voice.status(), provider: sttProvider });
+    sendJson(res, { ...currentVoiceStatus(), provider: sttProvider });
+    return;
+  }
+
+  if (url.pathname === "/speak" && req.method === "POST") {
+    await handleSpeakRequest(req, res);
     return;
   }
 
@@ -86,6 +165,10 @@ const server = http.createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ noServer: true });
 const clients = new Set();
+const discoveryResponder = createDiscoveryResponder({
+  discoveryPort,
+  monitorPort: port
+});
 
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -133,6 +216,8 @@ server.listen(port, "0.0.0.0", () => {
   for (const address of addresses) {
     console.log(`Device WebSocket: ws://${address}:${port}/device`);
   }
+  discoveryResponder.start();
+  warmWakeSpeech();
 });
 
 function broadcast(payload) {
@@ -154,21 +239,132 @@ async function handleTextMessage(ws, message) {
 
   if (ws.role !== "device") return;
 
+  if (payload.type === "voice_wake") {
+    const agent = normalizeVoiceAgent(payload.agent);
+    const voiceStatus = voice.status();
+    if (!shouldAcceptVoiceWake({
+      voiceState: voiceStatus.state,
+      nowMs: Date.now(),
+      deviceSpeechBusyUntilMs,
+      speechInFlight: deviceSpeechInFlight || assistantTurnInFlight
+    })) {
+      console.log(
+        `[${new Date().toISOString()}] voice_wake_ignored ` +
+        `agent=${agent} voiceState=${voiceStatus.state} busyUntil=${deviceSpeechBusyUntilMs}`
+      );
+      return;
+    }
+    if (deviceWakeCue) {
+      voiceConversationActive = true;
+      activeVoiceMode = "continue";
+      resetVoiceConversation();
+      console.log(`[${new Date().toISOString()}] voice_wake_local agent=${agent}`);
+      return;
+    }
+    voiceConversationActive = true;
+    activeVoiceMode = "continue";
+    resetVoiceConversation();
+    await speakToDevice(wakeGreetingText(), wakeSpeechOptions(agent));
+    return;
+  }
+
   if (payload.type === "voice_start") {
+    const mode = normalizeVoiceMode(payload.mode);
+    if (!shouldAcceptVoiceStart({
+      mode,
+      conversationActive: voiceConversationActive,
+      nowMs: Date.now(),
+      deviceSpeechBusyUntilMs,
+      deviceSpeechInFlight,
+      assistantTurnInFlight
+    })) {
+      console.log(
+        `[${new Date().toISOString()}] voice_start_ignored ` +
+        `agent=${normalizeVoiceAgent(payload.agent)} speechInFlight=${deviceSpeechInFlight} ` +
+        `assistantInFlight=${assistantTurnInFlight} busyUntil=${deviceSpeechBusyUntilMs}`
+      );
+      return;
+    }
+    activeVoiceMode = mode;
+    if (mode === "dictate") {
+      voiceConversationActive = false;
+      resetVoiceConversation();
+    }
     voice.start({ agent: normalizeVoiceAgent(payload.agent) });
     await publishStatus();
     return;
   }
 
-  if (payload.type === "voice_stop") {
-    await voice.stop();
+  if (payload.type === "voice_exit") {
+    voiceConversationActive = false;
+    activeVoiceMode = "idle";
+    voice.cancel();
+    resetVoiceConversation();
+    console.log(`[${new Date().toISOString()}] voice_session_exit agent=${normalizeVoiceAgent(payload.agent)}`);
     await publishStatus();
     return;
   }
 
-  if (payload.type === "voice_send") {
-    await voice.send();
+  if (payload.type === "voice_stop") {
+    const mode = activeVoiceMode;
+    const conversationActive = isConversationVoiceMode({
+      mode,
+      conversationActive: voiceConversationActive
+    });
+    const status = await voice.stop();
+    activeVoiceMode = "idle";
+    logVoiceStop(status);
     await publishStatus();
+    void handleAssistantTurn(status, { conversationActive }).catch((caught) => {
+      console.error(`[${new Date().toISOString()}] assistant_turn_failed`, caught);
+    });
+    return;
+  }
+
+  if (payload.type === "voice_export") {
+    activeVoiceMode = "idle";
+    await exportVoiceConversation(normalizeVoiceAgent(payload.agent));
+    return;
+  }
+
+  if (payload.type === "voice_send") {
+    const before = voice.status();
+    await voice.send();
+    if (before.intent?.action === "conversation_export") {
+      resetVoiceConversation();
+    }
+    await publishStatus();
+  }
+}
+
+function logVoiceStop(status) {
+  const audio = status.audio || {};
+  console.log(
+    `[${new Date().toISOString()}] voice_stop_result ` +
+    `agent=${status.agent} state=${status.state} durationMs=${audio.durationMs ?? 0} ` +
+    `bytes=${audio.bytes ?? 0} rms=${audio.rms ?? 0} peak=${audio.peak ?? 0} ` +
+    `asrMs=${status.asr?.latencyMs ?? "-"} ` +
+    `clipped=${audio.clippedSamples ?? 0} textChars=${String(status.text || "").length} ` +
+    `text=${JSON.stringify(clipLogText(status.text))} ` +
+    `error=${status.error || ""}`
+  );
+}
+
+async function saveDebugVoiceAudio(audio, metadata = {}) {
+  if (!voiceDebugAudioDir) return;
+  try {
+    await mkdir(voiceDebugAudioDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const agent = normalizeVoiceAgent(metadata.agent);
+    const file = `${voiceDebugAudioDir}/${stamp}-${agent}.wav`;
+    await writeFile(file, audio);
+    console.log(
+      `[${new Date().toISOString()}] voice_debug_audio_saved ` +
+      `file=${file} bytes=${audio.length} durationMs=${metadata.audio?.durationMs ?? 0} ` +
+      `rms=${metadata.audio?.rms ?? 0} peak=${metadata.audio?.peak ?? 0}`
+    );
+  } catch (caught) {
+    console.error(`[${new Date().toISOString()}] voice_debug_audio_failed`, caught);
   }
 }
 
@@ -177,13 +373,261 @@ async function publishStatus() {
   broadcast({ type: "status", status: latestStatus });
 }
 
+async function handleSpeakRequest(req, res) {
+  try {
+    const body = await readJsonBody(req);
+    const text = String(body.text || "").trim();
+    if (!text) {
+      sendJson(res, { error: "text_required" }, 400);
+      return;
+    }
+    const result = await speakToDevice(text);
+    sendJson(res, result);
+  } catch (caught) {
+    sendJson(res, { error: caught instanceof Error ? caught.message : String(caught) }, 500);
+  }
+}
+
+async function handleAssistantTurn(status, { conversationActive = false } = {}) {
+  if (!assistantEnabled) return;
+  assistantTurnInFlight = true;
+  try {
+    if (!conversationActive) {
+      return;
+    }
+
+    if (!status?.text) {
+      if (shouldRepromptAfterEmptyTranscript(status, { conversationActive })) {
+        await speakToDevice("我没听清，再说一遍。", {
+          agent: status?.agent,
+          after: "listen"
+        });
+      } else if (conversationActive && ["empty", "too_short", "too_quiet", "error"].includes(status?.state)) {
+        await speakToDevice("我没有听清，再说一次。", {
+          agent: status?.agent,
+          after: "listen"
+        });
+      }
+      return;
+    }
+
+    if (conversationActive) {
+      addVoiceConversationTurn("user", status.text);
+    }
+    console.log(
+      `[${new Date().toISOString()}] assistant_heard ` +
+      `agent=${status.agent} text=${JSON.stringify(clipLogText(status.text))} action=${status.intent?.action || "unknown"}`
+    );
+
+    if (shouldExitConversation(status.intent)) {
+      resetVoiceConversation();
+      console.log(
+        `[${new Date().toISOString()}] voice_session_exit_by_speech ` +
+        `agent=${status.agent} text=${JSON.stringify(clipLogText(status.text))}`
+      );
+      await speakToDevice("已退出对话。", {
+        agent: status.agent,
+        after: "idle"
+      });
+      return;
+    }
+
+    if (shouldSilenceFocusedDictation(status)) {
+      return;
+    }
+
+    const assistantStartedAt = Date.now();
+    assistantProcessing = {
+      active: true,
+      agent: normalizeVoiceAgent(status.agent),
+      startedAt: assistantStartedAt
+    };
+    await publishStatus();
+    const reply = await assistantResponder({
+      text: status.text,
+      agent: status.agent,
+      intent: status.intent,
+      preparedForAgent: status.preparedForAgent,
+      history: voiceConversationTurns
+    });
+    const assistantMs = Date.now() - assistantStartedAt;
+    console.log(
+      `[${new Date().toISOString()}] assistant_reply ` +
+      `agent=${status.agent} source=${reply.source} chatMs=${assistantMs} ` +
+      `text=${JSON.stringify(reply.text)} error=${reply.error || ""}`
+    );
+    if (conversationActive) {
+      addVoiceConversationTurn("assistant", reply.text);
+    }
+    await speakToDevice(reply.text, speechOptionsForAssistantStatus(status));
+  } catch (caught) {
+    console.error(`[${new Date().toISOString()}] assistant_turn_failed`, caught);
+  } finally {
+    assistantProcessing = { active: false, agent: "codex", startedAt: 0 };
+    assistantTurnInFlight = false;
+  }
+}
+
+async function exportVoiceConversation(agent = "codex") {
+  const transcript = formatVoiceConversationTranscript(voiceConversationTurns);
+  voiceConversationActive = false;
+  voice.cancel();
+  if (!transcript) {
+    await publishStatus();
+    return;
+  }
+
+  const status = await voice.prepareText(transcript, {
+    agent,
+    intent: { action: "conversation_export" }
+  });
+  console.log(
+    `[${new Date().toISOString()}] voice_conversation_export ` +
+    `agent=${status.agent} chars=${transcript.length} turns=${voiceConversationTurns.length}`
+  );
+  await publishStatus();
+}
+
+function resetVoiceConversation() {
+  voiceConversationTurns = [];
+}
+
+function addVoiceConversationTurn(role, text) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  if (!normalized) return;
+  voiceConversationTurns.push({
+    role: role === "assistant" ? "assistant" : "user",
+    text: normalized
+  });
+}
+
+function formatVoiceConversationTranscript(turns = []) {
+  return turns
+    .map((turn) => `${turn.role === "assistant" ? "傻妞" : "我"}：${turn.text}`)
+    .join("\n")
+    .trim();
+}
+
+function clipLogText(text, maxChars = 80) {
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  const chars = Array.from(normalized);
+  if (chars.length <= maxChars) return normalized;
+  return `${chars.slice(0, maxChars).join("")}...`;
+}
+
+async function speakToDevice(text, speechOptions = {}) {
+  if (!synthesizeSpeech) {
+    throw new Error(`Unsupported TTS provider: ${ttsProvider}`);
+  }
+  deviceSpeechInFlight = true;
+  const startedAt = Date.now();
+  try {
+    const wakeProfile = speechOptions.profile === "wake";
+    const selectedGain = wakeProfile && Number.isFinite(wakeTtsGain) && wakeTtsGain > 0
+      ? wakeTtsGain
+      : (Number.isFinite(ttsGain) && ttsGain > 0 ? ttsGain : 1);
+    const synthesizeOptions = wakeProfile && Number.isFinite(wakeTtsVolume) && wakeTtsVolume > 0
+      ? { volume: wakeTtsVolume }
+      : {};
+    if (wakeProfile) {
+      synthesizeOptions.cacheKey = wakeSpeechCacheKey(text, synthesizeOptions);
+    }
+    const speech = await synthesizeSpeech(text, synthesizeOptions);
+    const synthMs = Date.now() - startedAt;
+    const sendStartedAt = Date.now();
+    const devices = sendPcmSpeechToDevices(clients, {
+      ...speech,
+      text
+    }, {
+      chunkBytes: Number.isFinite(ttsChunkBytes) && ttsChunkBytes > 0 ? ttsChunkBytes : 2048,
+      gain: selectedGain,
+      after: speechOptions.after,
+      agent: speechOptions.agent
+    });
+    const sendMs = Date.now() - sendStartedAt;
+    if (devices > 0) {
+      deviceSpeechBusyUntilMs = Math.max(
+        deviceSpeechBusyUntilMs,
+        Date.now() + estimateSpeechDurationMs(speech) + 600
+      );
+    }
+    console.log(
+      `[${new Date().toISOString()}] tts_sent devices=${devices} bytes=${speech.audio.length} ` +
+      `sampleRate=${speech.sampleRate} gain=${selectedGain} profile=${speechOptions.profile || "default"} ` +
+      `after=${speechOptions.after || "idle"} agent=${speechOptions.agent || ""} ` +
+      `synthMs=${synthMs} sendMs=${sendMs} totalMs=${Date.now() - startedAt} text=${JSON.stringify(text)}`
+    );
+    return { ok: true, devices, bytes: speech.audio.length, sampleRate: speech.sampleRate, format: speech.format, text };
+  } finally {
+    deviceSpeechInFlight = false;
+  }
+}
+
+function warmWakeSpeech() {
+  if (deviceWakeCue || !synthesizeSpeech) return;
+  const text = wakeGreetingText();
+  const options = Number.isFinite(wakeTtsVolume) && wakeTtsVolume > 0
+    ? { volume: wakeTtsVolume }
+    : {};
+  options.cacheKey = wakeSpeechCacheKey(text, options);
+  void synthesizeSpeech(text, options)
+    .then((speech) => {
+      console.log(
+        `[${new Date().toISOString()}] wake_tts_warmed ` +
+        `bytes=${speech.audio?.length ?? 0} sampleRate=${speech.sampleRate ?? ""}`
+      );
+    })
+    .catch((caught) => {
+      const message = caught instanceof Error ? caught.message : String(caught);
+      console.warn(`[${new Date().toISOString()}] wake_tts_warm_failed ${message}`);
+    });
+}
+
+function wakeSpeechCacheKey(text, options = {}) {
+  return JSON.stringify({
+    provider: ttsProvider,
+    profile: "wake",
+    text: String(text || ""),
+    volume: options.volume || ""
+  });
+}
+
+function estimateSpeechDurationMs({ audio, sampleRate, format }) {
+  if (format !== "pcm_s16le" || !sampleRate) return 0;
+  const bytes = Buffer.isBuffer(audio) ? audio.length : Buffer.byteLength(audio || "");
+  return Math.ceil((bytes / 2 / sampleRate) * 1000);
+}
+
+function parseBooleanEnv(value, fallback) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  return fallback;
+}
+
+function createSpeechSynthesizer(provider) {
+  if (provider === "aliyun") return createAliyunTtsSynthesizer();
+  if (provider === "doubao") return createDoubaoTtsSynthesizer();
+  return null;
+}
+
+function currentVoiceStatus() {
+  return voiceStatusWithAssistantProcessing(voice.status(), {
+    ...assistantProcessing,
+    nowMs: Date.now()
+  });
+}
+
+async function readJsonBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(Buffer.from(chunk));
+  const raw = Buffer.concat(chunks).toString("utf8");
+  return raw ? JSON.parse(raw) : {};
+}
+
 async function collectStatus() {
-  const [battery, git, memory, agents] = await Promise.all([
-    getBattery(),
-    getGitStatus(),
-    getMemory(),
-    getAgents()
-  ]);
+  const { battery, git, memory, agents } = await slowStatusCache.get();
   const load = os.loadavg();
   const cpuPercent = getCpuPercent();
 
@@ -202,8 +646,24 @@ async function collectStatus() {
     battery,
     git,
     agents,
-    voice: { ...voice.status(), provider: sttProvider },
+    voice: { ...currentVoiceStatus(), provider: sttProvider, deviceWakeCue },
     alerts: buildAlerts({ cpuPercent, memoryPercent: memory.percent, battery, git, agents })
+  };
+}
+
+async function collectSlowStatus() {
+  const [battery, git, memory, agents] = await Promise.all([
+    getBattery(),
+    getGitStatus(),
+    getMemory(),
+    getAgents()
+  ]);
+
+  return {
+    battery,
+    git,
+    memory,
+    agents,
   };
 }
 
@@ -431,7 +891,7 @@ async function readCodexRateLimitStatus() {
       }
     }
 
-    const usageWindows = buildCodexUsageWindows(newest?.rateLimits);
+    const usageWindows = buildCodexUsageWindows(newest?.rateLimits, { timeZone: displayTimeZone });
     const status = usageWindows.length
       ? {
           usageWindows,
@@ -561,11 +1021,14 @@ function normalizeAgent(name, raw = {}, processOnline = false) {
   const online = typeof raw.online === "boolean" ? raw.online : processOnline;
   const usageWindows = normalizeUsageWindows(raw.usageWindows);
   const trends = raw.trends || {};
+  const updatedAt = raw.updatedAt || raw.lastUpdated || null;
+  const freshness = agentFreshness(updatedAt, { staleAfterMs: agentStaleAfterMs });
+  const hasRawData = Boolean(Object.keys(raw).length);
 
   return {
     name,
     online,
-    state: String(raw.state || (online ? "online" : "offline")),
+    state: freshness.stale && hasRawData ? "stale" : String(raw.state || (online ? "online" : "offline")),
     task: String(raw.task || raw.currentTask || ""),
     progress,
     tokens: {
@@ -578,10 +1041,13 @@ function normalizeAgent(name, raw = {}, processOnline = false) {
       weekly: normalizeTokenTrend(raw.weeklyTrend ?? trends.weekly, weeklyTokensUsed, trendBucketCount)
     },
     usageWindows,
-    updatedAt: raw.updatedAt || raw.lastUpdated || null,
+    updatedAt,
+    stale: freshness.stale,
+    freshness,
     source: {
       file: Boolean(Object.keys(raw).length),
-      process: processOnline
+      process: processOnline,
+      dataFresh: !freshness.stale
     }
   };
 }
@@ -620,61 +1086,6 @@ function normalizeUsageWindows(windows) {
       resetText: String(window?.resetText || "--")
     };
   }).filter((window) => window.remainingPercent !== null);
-}
-
-function buildCodexUsageWindows(rateLimits) {
-  if (!rateLimits) return [];
-  return [
-    buildCodexUsageWindow("primary", rateLimits.primary),
-    buildCodexUsageWindow("secondary", rateLimits.secondary)
-  ].filter(Boolean);
-}
-
-function buildCodexUsageWindow(kind, limit) {
-  const usedPercent = numberOrNull(limit?.used_percent);
-  if (usedPercent === null) return null;
-
-  const windowMinutes = numberOrNull(limit?.window_minutes);
-  const resetsAt = numberOrNull(limit?.resets_at);
-
-  return {
-    kind,
-    label: formatWindowLabel(windowMinutes, kind),
-    windowMinutes,
-    usedPercent: clampPercent(usedPercent),
-    remainingPercent: clampPercent(100 - usedPercent),
-    resetAt: timestampFromSeconds(resetsAt),
-    resetText: formatResetText(resetsAt)
-  };
-}
-
-function formatWindowLabel(windowMinutes, kind) {
-  const minutes = numberOrNull(windowMinutes);
-  if (!minutes) return kind === "secondary" ? "1w" : "5h";
-  if (minutes % 10080 === 0) return `${minutes / 10080}w`;
-  if (minutes % 1440 === 0) return `${minutes / 1440}d`;
-  if (minutes % 60 === 0) return `${minutes / 60}h`;
-  return `${minutes}m`;
-}
-
-function formatResetText(seconds) {
-  const resetSeconds = numberOrNull(seconds);
-  if (resetSeconds === null) return "--";
-
-  const resetMs = resetSeconds * 1000;
-  const deltaMinutes = Math.max(0, Math.ceil((resetMs - Date.now()) / 60000));
-  if (deltaMinutes < 48 * 60) {
-    const hours = Math.floor(deltaMinutes / 60);
-    const minutes = deltaMinutes % 60;
-    return `${pad2(hours)}:${pad2(minutes)}`;
-  }
-
-  const date = new Date(resetMs);
-  return `${date.getMonth() + 1}/${date.getDate()}`;
-}
-
-function pad2(value) {
-  return String(value).padStart(2, "0");
 }
 
 async function listRecentJsonlFiles(root, limit) {
@@ -805,14 +1216,51 @@ function buildAlerts({ cpuPercent, memoryPercent, battery, git, agents }) {
   return alerts;
 }
 
-async function pasteIntoFocusedInput(text) {
+async function pasteIntoFocusedInput(text, context = {}) {
+  const targetApp = activationNameForTargetApp(
+    context?.intent?.targetApp || context?.intent?.targetAgent || ""
+  );
   await execFileAsync("osascript", [
-    "-e", "on run argv",
-    "-e", "set the clipboard to item 1 of argv",
-    "-e", "tell application \"System Events\" to keystroke \"v\" using command down",
-    "-e", "end run",
-    text
+    ...buildPasteScript(),
+    text,
+    targetApp
   ], { timeout: 5000 });
+}
+
+async function shouldPasteVoiceTranscript({ intent }) {
+  const conversationActive = isConversationVoiceMode({
+    mode: activeVoiceMode,
+    conversationActive: voiceConversationActive
+  });
+  const needsFocusedProbe = assistantEnabled && focusedDictationEnabled && !conversationActive;
+  const focusedTextInput = needsFocusedProbe ? await hasFocusedTextInput() : false;
+  return shouldPasteRecognizedSpeech({
+    assistantEnabled,
+    focusedDictationEnabled,
+    focusedTextInput,
+    conversationActive,
+    intent
+  });
+}
+
+async function hasFocusedTextInput() {
+  try {
+    const { stdout } = await execFileAsync("osascript", buildFocusedInputProbeScript(), { timeout: 1200 });
+    const info = parseFocusedInputProbe(stdout);
+    const focused = isFocusedTextInput(info);
+    if (focused) {
+      console.log(
+        `[${new Date().toISOString()}] focused_dictation_target ` +
+        `app=${JSON.stringify(info.app)} role=${JSON.stringify(info.role)} ` +
+        `description=${JSON.stringify(info.description)}`
+      );
+    }
+    return focused;
+  } catch (caught) {
+    const message = caught instanceof Error ? caught.message : String(caught);
+    console.warn(`[${new Date().toISOString()}] focused_input_probe_failed ${message}`);
+    return false;
+  }
 }
 
 async function pressReturnInFocusedInput() {
@@ -821,13 +1269,8 @@ async function pressReturnInFocusedInput() {
   ], { timeout: 5000 });
 }
 
-function normalizeVoiceAgent(value) {
-  const agent = String(value || "").toLowerCase();
-  return agent === "claude" || agent === "claude-code" ? "claude" : "codex";
-}
-
-function sendJson(res, payload) {
-  res.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+function sendJson(res, payload, statusCode = 200) {
+  res.writeHead(statusCode, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(payload, null, 2));
 }
 
@@ -847,18 +1290,6 @@ async function sendLogo(filename, res) {
     res.writeHead(404, { "content-type": "application/json; charset=utf-8" });
     res.end(JSON.stringify({ error: "logo_not_found" }));
   }
-}
-
-function getLocalAddresses() {
-  const addresses = [];
-  for (const entries of Object.values(os.networkInterfaces())) {
-    for (const entry of entries || []) {
-      if (entry.family === "IPv4" && !entry.internal) {
-        addresses.push(entry.address);
-      }
-    }
-  }
-  return addresses;
 }
 
 function round(value, precision) {

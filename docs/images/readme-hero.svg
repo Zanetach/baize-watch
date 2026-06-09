@@ -1,84 +1,105 @@
 <svg width="1280" height="640" viewBox="0 0 1280 640" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <radialGradient id="screenGlow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(362 312) rotate(45) scale(300)">
-      <stop offset="0" stop-color="#203166"/>
-      <stop offset="0.55" stop-color="#111827"/>
-      <stop offset="1" stop-color="#070A12"/>
+    <radialGradient id="watchFace" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(358 320) rotate(45) scale(286)">
+      <stop offset="0" stop-color="#18234A"/>
+      <stop offset="0.58" stop-color="#101726"/>
+      <stop offset="1" stop-color="#05070D"/>
     </radialGradient>
-    <linearGradient id="blue" x1="112" y1="88" x2="578" y2="554" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#65E6FF"/>
-      <stop offset="0.5" stop-color="#4B7CFF"/>
-      <stop offset="1" stop-color="#B16CFF"/>
+    <linearGradient id="cyanViolet" x1="146" y1="144" x2="566" y2="494" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5EEAD4"/>
+      <stop offset="0.42" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#A78BFA"/>
     </linearGradient>
-    <linearGradient id="amber" x1="145" y1="180" x2="250" y2="448" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFD27A"/>
-      <stop offset="1" stop-color="#FF8B5D"/>
+    <linearGradient id="warmArc" x1="144" y1="168" x2="250" y2="484" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FDE68A"/>
+      <stop offset="1" stop-color="#FB7185"/>
     </linearGradient>
-    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="30" stdDeviation="28" flood-color="#000000" flood-opacity="0.36"/>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="28" stdDeviation="24" flood-color="#000000" flood-opacity="0.42"/>
     </filter>
   </defs>
 
-  <rect width="1280" height="640" rx="48" fill="#0A0F1E"/>
-  <path d="M0 0H1280V640H0V0Z" fill="url(#screenGlow)" opacity="0.72"/>
-  <circle cx="140" cy="120" r="260" fill="#1D4ED8" opacity="0.18"/>
-  <circle cx="1180" cy="610" r="360" fill="#7C3AED" opacity="0.16"/>
+  <rect width="1280" height="640" rx="44" fill="#07101E"/>
+  <path d="M0 0H1280V640H0V0Z" fill="#0B1020"/>
+  <circle cx="168" cy="112" r="272" fill="#1D4ED8" opacity="0.17"/>
+  <circle cx="1080" cy="90" r="240" fill="#14B8A6" opacity="0.11"/>
+  <circle cx="1110" cy="600" r="360" fill="#7C3AED" opacity="0.16"/>
 
-  <g filter="url(#softShadow)">
-    <circle cx="362" cy="320" r="250" fill="#0C101B"/>
-    <circle cx="362" cy="320" r="232" fill="#151B2B"/>
-    <circle cx="362" cy="320" r="214" fill="#080B13"/>
-    <path d="M175 394A202 202 0 0 1 288 133" stroke="url(#amber)" stroke-width="12" stroke-linecap="round"/>
-    <path d="M438 129A202 202 0 0 1 551 393" stroke="url(#blue)" stroke-width="8" stroke-linecap="round" opacity="0.9"/>
-    <path d="M180 240A195 195 0 0 1 271 148" stroke="#46F1FF" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
-    <path d="M450 150A195 195 0 0 1 541 240" stroke="#46F1FF" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <g filter="url(#shadow)">
+    <circle cx="358" cy="320" r="252" fill="#070A12"/>
+    <circle cx="358" cy="320" r="234" fill="#111827"/>
+    <circle cx="358" cy="320" r="214" fill="url(#watchFace)"/>
 
-    <rect x="310" y="156" width="104" height="104" rx="27" fill="#F8FAFC"/>
-    <path d="M357 185C372 173 398 179 404 200C421 205 429 227 415 242C403 257 375 251 362 247C347 254 322 248 316 229C310 210 321 194 337 192C341 189 348 185 357 185Z" fill="#2563EB"/>
-    <path d="M336 218L355 238L385 197" stroke="white" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M377 232H407" stroke="white" stroke-width="13" stroke-linecap="round"/>
+    <path d="M171 394A205 205 0 0 1 284 132" stroke="url(#warmArc)" stroke-width="13" stroke-linecap="round"/>
+    <path d="M438 130A205 205 0 0 1 550 392" stroke="url(#cyanViolet)" stroke-width="9" stroke-linecap="round"/>
+    <path d="M184 238A190 190 0 0 1 276 153" stroke="#67E8F9" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+    <path d="M438 153A190 190 0 0 1 532 238" stroke="#A78BFA" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+
+    <g transform="translate(306 138)">
+      <rect width="104" height="104" rx="27" fill="#F8FAFC"/>
+      <path d="M51 29C66 17 92 23 98 44C115 49 123 71 109 86C97 101 69 95 56 91C41 98 16 92 10 73C4 54 15 38 31 36C35 33 42 29 51 29Z" fill="#2563EB"/>
+      <path d="M30 62L49 82L79 41" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M71 76H101" stroke="#FFFFFF" stroke-width="13" stroke-linecap="round"/>
+    </g>
 
     <g font-family="Inter, Arial, sans-serif">
-      <text x="255" y="320" fill="#7DD3FC" font-size="20" font-weight="700">usage</text>
-      <text x="430" y="320" fill="#C4B5FD" font-size="20" font-weight="700">weekly</text>
-      <polyline points="224,386 245,368 266,374 287,342 308,350 329,315" stroke="#67E8F9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-      <polyline points="398,374 419,358 440,362 461,330 482,340 503,304" stroke="#A78BFA" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-      <text x="246" y="463" fill="#E5E7EB" font-size="22" font-weight="700">5h</text>
-      <text x="466" y="463" fill="#E5E7EB" font-size="22" font-weight="700">1w</text>
-      <g fill="#5EEAD4">
-        <rect x="284" y="446" width="8" height="22" rx="4"/>
-        <rect x="299" y="446" width="8" height="22" rx="4"/>
-        <rect x="314" y="446" width="8" height="22" rx="4"/>
-        <rect x="329" y="446" width="8" height="22" rx="4"/>
-        <rect x="344" y="446" width="8" height="22" rx="4"/>
+      <text x="358" y="282" fill="#E5E7EB" font-size="22" font-weight="800" text-anchor="middle">thinking</text>
+      <text x="358" y="309" fill="#A78BFA" font-size="16" font-weight="700" text-anchor="middle">AI 1.4s</text>
+      <g fill="#94A3B8">
+        <rect x="327" y="334" width="6" height="20" rx="3"/>
+        <rect x="340" y="329" width="6" height="30" rx="3"/>
+        <rect x="353" y="324" width="6" height="40" rx="3"/>
+        <rect x="366" y="329" width="6" height="30" rx="3"/>
+        <rect x="379" y="334" width="6" height="20" rx="3"/>
       </g>
-      <g fill="#9CA3AF">
-        <rect x="359" y="446" width="8" height="22" rx="4"/>
-        <rect x="374" y="446" width="8" height="22" rx="4"/>
-        <rect x="389" y="446" width="8" height="22" rx="4"/>
-        <rect x="404" y="446" width="8" height="22" rx="4"/>
+      <text x="234" y="392" fill="#67E8F9" font-size="19" font-weight="800">usage</text>
+      <text x="430" y="392" fill="#C4B5FD" font-size="19" font-weight="800">weekly</text>
+      <polyline points="220,448 241,438 262,442 283,414 304,424 325,398" stroke="#67E8F9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <polyline points="404,442 425,428 446,432 467,406 488,412 509,388" stroke="#A78BFA" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="236" y="506" fill="#E5E7EB" font-size="22" font-weight="800">5h</text>
+      <text x="455" y="506" fill="#E5E7EB" font-size="22" font-weight="800">1w</text>
+      <g fill="#5EEAD4">
+        <rect x="275" y="490" width="8" height="21" rx="4"/>
+        <rect x="291" y="490" width="8" height="21" rx="4"/>
+        <rect x="307" y="490" width="8" height="21" rx="4"/>
+        <rect x="323" y="490" width="8" height="21" rx="4"/>
+        <rect x="339" y="490" width="8" height="21" rx="4"/>
+      </g>
+      <g fill="#64748B">
+        <rect x="355" y="490" width="8" height="21" rx="4"/>
+        <rect x="371" y="490" width="8" height="21" rx="4"/>
+        <rect x="387" y="490" width="8" height="21" rx="4"/>
       </g>
     </g>
   </g>
 
   <g font-family="Inter, Arial, sans-serif">
-    <text x="690" y="178" fill="#F8FAFC" font-size="56" font-weight="800">StopWatch Desktop Monitor</text>
-    <text x="694" y="228" fill="#CBD5E1" font-size="26">A local macOS service and ESP32-S3 firmware for turning</text>
-    <text x="694" y="262" fill="#CBD5E1" font-size="26">an M5Stack StopWatch into a Codex / Claude Code status display.</text>
+    <text x="664" y="164" fill="#F8FAFC" font-size="44" font-weight="850">StopWatch Desktop Monitor</text>
+    <text x="668" y="214" fill="#CBD5E1" font-size="23">Local macOS bridge and ESP32-S3 firmware</text>
+    <text x="668" y="248" fill="#CBD5E1" font-size="23">for Codex / Claude status, voice input, and TTS.</text>
 
-    <rect x="694" y="318" width="418" height="58" rx="16" fill="#101827" stroke="#334155"/>
-    <text x="724" y="354" fill="#93C5FD" font-size="24" font-weight="700">npx github:Zanetach/stopwatch install</text>
+    <rect x="668" y="304" width="452" height="62" rx="16" fill="#0F172A" stroke="#334155"/>
+    <text x="698" y="342" fill="#93C5FD" font-size="24" font-weight="800">npx github:Zanetach/stopwatch install</text>
 
     <g fill="#0F172A" stroke="#334155">
-      <rect x="694" y="414" width="156" height="74" rx="18"/>
-      <rect x="874" y="414" width="156" height="74" rx="18"/>
-      <rect x="1054" y="414" width="156" height="74" rx="18"/>
+      <rect x="668" y="408" width="166" height="78" rx="18"/>
+      <rect x="860" y="408" width="176" height="78" rx="18"/>
+      <rect x="1062" y="408" width="156" height="78" rx="18"/>
     </g>
-    <text x="732" y="446" fill="#F8FAFC" font-size="19" font-weight="700">LaunchAgent</text>
-    <text x="724" y="472" fill="#94A3B8" font-size="16">background service</text>
-    <text x="918" y="446" fill="#F8FAFC" font-size="19" font-weight="700">WebSocket</text>
-    <text x="910" y="472" fill="#94A3B8" font-size="16">device bridge</text>
-    <text x="1096" y="446" fill="#F8FAFC" font-size="19" font-weight="700">Aliyun ASR</text>
-    <text x="1086" y="472" fill="#94A3B8" font-size="16">voice to text</text>
+    <text x="710" y="442" fill="#F8FAFC" font-size="18" font-weight="800">Doubao ASR</text>
+    <text x="700" y="468" fill="#94A3B8" font-size="15">native 2.0 speech</text>
+    <text x="902" y="442" fill="#F8FAFC" font-size="18" font-weight="800">Focused Paste</text>
+    <text x="892" y="468" fill="#94A3B8" font-size="15">Codex, Claude, chat</text>
+    <text x="1100" y="442" fill="#F8FAFC" font-size="18" font-weight="800">Device TTS</text>
+    <text x="1090" y="468" fill="#94A3B8" font-size="15">speaker playback</text>
+
+    <g fill="#111827" stroke="#334155">
+      <rect x="668" y="526" width="244" height="42" rx="14"/>
+      <rect x="932" y="526" width="244" height="42" rx="14"/>
+    </g>
+    <circle cx="694" cy="547" r="6" fill="#22C55E"/>
+    <text x="710" y="553" fill="#E5E7EB" font-size="15" font-weight="700">LaunchAgent background</text>
+    <circle cx="958" cy="547" r="6" fill="#A78BFA"/>
+    <text x="974" y="553" fill="#E5E7EB" font-size="15" font-weight="700">LAN discovery UDP 8788</text>
   </g>
 </svg>

@@ -20,6 +20,16 @@ test("firmware provides Wi-Fi setup portal for scan, selection, password entry, 
   assert.match(firmwareSource, /WiFi\.localIP\(\)/);
 });
 
+test("firmware discovers the desktop monitor over LAN before using the fallback URL", () => {
+  assert.match(firmwareSource, /#include <WiFiUdp\.h>/);
+  assert.match(firmwareSource, /DISCOVERY_PORT = 8788/);
+  assert.match(firmwareSource, /discoverMonitorWebSocketUrl/);
+  assert.match(firmwareSource, /currentMonitorWsUrl/);
+  assert.match(firmwareSource, /stopwatch-monitor-discover-v1/);
+  assert.match(firmwareSource, /client\.connect\(currentMonitorWsUrl\)/);
+  assert.doesNotMatch(firmwareSource, /client\.connect\(MONITOR_WS_URL\)/);
+});
+
 test("firmware supports on-device Wi-Fi scanning and password keyboard", () => {
   assert.match(firmwareSource, /UiMode::WifiList/);
   assert.match(firmwareSource, /UiMode::WifiKeyboard/);
@@ -60,6 +70,14 @@ test("password keyboard gives delete a second large touch target in the input pa
   assert.match(firmwareSource, /pointInRect\(x, y, PASSWORD_DELETE_LEFT/);
 });
 
+test("password delete button keeps its touch target without a visible frame", () => {
+  const deleteButton = firmwareSource.match(/void drawPasswordDeleteButton\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.match(deleteButton, /drawString\("Del"/);
+  assert.doesNotMatch(deleteButton, /fillRoundRect/);
+  assert.doesNotMatch(deleteButton, /drawRoundRect/);
+});
+
 test("password input removes the PASS label and heavy background frame", () => {
   assert.doesNotMatch(firmwareSource, /drawString\("PASS"/);
   assert.doesNotMatch(firmwareSource, /fillRoundRect\(PASSWORD_PANEL_LEFT, PASSWORD_PANEL_TOP, PASSWORD_PANEL_WIDTH, PASSWORD_PANEL_HEIGHT/);
@@ -98,6 +116,11 @@ test("config screen entry avoids stealing active voice recording controls", () =
   );
 });
 
+test("voice controls ignore new wake requests while speaking or transcribing", () => {
+  const handleButtons = firmwareSource.match(/void handleButtons\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(handleButtons, /voiceStatus\.state == "speaking" \|\| voiceStatus\.state == "transcribing" \|\| voiceStatus\.state == "thinking"/);
+});
+
 test("config screens keep content inside the round display without function background boxes", () => {
   const configScreen = firmwareSource.match(/void drawConfigScreen\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   const wifiListScreen = firmwareSource.match(/void drawWifiListScreen\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
@@ -112,6 +135,10 @@ test("config screens keep content inside the round display without function back
   assert.match(firmwareSource, /WIFI_LIST_LEFT = 88/);
   assert.match(firmwareSource, /WIFI_LIST_WIDTH = 288/);
   assert.match(firmwareSource, /WIFI_LIST_MESSAGE_Y = 400/);
+  assert.match(firmwareSource, /"Device WS", ConfigAction::ReconnectServer/);
+  assert.match(firmwareSource, /drawConfigStatusRow\("Device WS", websocketConnected \? "connected" : "offline"/);
+  assert.match(firmwareSource, /Device WS connected/);
+  assert.match(firmwareSource, /Device WS offline/);
   assert.match(firmwareSource, /drawConfigStatusPanel/);
   assert.match(firmwareSource, /drawConfigStatusRow/);
   assert.match(firmwareSource, /drawConfigMenuTile/);
@@ -136,6 +163,7 @@ test("dashboard keeps content layout while turning outer arcs into a subtle voic
   assert.match(firmwareSource, /drawAgentStateRing\(agent, accent\)/);
   assert.match(firmwareSource, /voiceStatus\.state == "recording"/);
   assert.match(firmwareSource, /voiceStatus\.state == "transcribing"/);
+  assert.match(firmwareSource, /voiceStatus\.state == "thinking"/);
   assert.match(firmwareSource, /voiceStatus\.state == "error"/);
   assert.match(firmwareSource, /COLOR_RING_DIM/);
   assert.match(firmwareSource, /COLOR_YELLOW/);
@@ -144,11 +172,130 @@ test("dashboard keeps content layout while turning outer arcs into a subtle voic
   assert.doesNotMatch(firmwareSource, /drawArc\(233, 233, 206, 199, -215, -35, accent\)/);
 });
 
+test("dashboard shows assistant thinking progress while waiting for a reply", () => {
+  assert.match(firmwareSource, /assistantThinkingStartedAt/);
+  assert.match(firmwareSource, /voiceStatus\.assistantElapsedMs/);
+  assert.match(firmwareSource, /drawString\("AI " \+ assistantLatencyText\(\), cx, cy \+ 42\)/);
+  assert.match(firmwareSource, /voiceStatus\.state == "thinking" \? COLOR_VIOLET : COLOR_YELLOW/);
+});
+
 test("dashboard logo uses a nonzero animation offset instead of a static logo draw", () => {
   assert.match(firmwareSource, /animatedLogoBob/);
   assert.match(firmwareSource, /drawAnimatedLogo\(agent, logo, animatedLogoBob\(\)\)/);
   assert.match(firmwareSource, /LOGO_ANIMATION_MS/);
   assert.doesNotMatch(firmwareSource, /drawAnimatedLogo\(agent, logo, 0\)/);
+});
+
+test("firmware plays assistant TTS audio on the StopWatch speaker", () => {
+  assert.match(firmwareSource, /#include <mbedtls\/base64\.h>/);
+  assert.match(firmwareSource, /handleTtsStart/);
+  assert.match(firmwareSource, /handleTtsAudio/);
+  assert.match(firmwareSource, /handleTtsDone/);
+  assert.match(firmwareSource, /mbedtls_base64_decode/);
+  assert.match(firmwareSource, /M5\.Mic\.end\(\)/);
+  assert.match(firmwareSource, /M5\.Speaker\.begin\(\)/);
+  assert.match(firmwareSource, /TTS_SPEAKER_VOLUME = 255/);
+  assert.match(firmwareSource, /M5\.Speaker\.playRaw/);
+  assert.match(firmwareSource, /waitForTtsPlaybackStart/);
+  assert.match(firmwareSource, /M5\.Speaker\.end\(\)/);
+  assert.match(firmwareSource, /type == "tts_start"/);
+  assert.match(firmwareSource, /type == "tts_audio"/);
+  assert.match(firmwareSource, /type == "tts_done"/);
+});
+
+test("firmware resumes listening after assistant wake or conversational speech", () => {
+  assert.match(firmwareSource, /voice_wake/);
+  assert.match(firmwareSource, /wakeVoiceAssistant/);
+  assert.match(firmwareSource, /playWakeCue/);
+  assert.match(firmwareSource, /deviceWakeCue/);
+  assert.match(firmwareSource, /voiceStatus\.deviceWakeCue/);
+  assert.match(firmwareSource, /startVoiceRecording\(agentIndex, false, "continue"\)/);
+  assert.match(firmwareSource, /ttsAfterAction/);
+  assert.match(firmwareSource, /ttsAfterAction == "listen"/);
+  assert.match(firmwareSource, /startVoiceRecording\(agentIndexForKey\(ttsAfterAgent\), false, "continue"\)/);
+  assert.match(firmwareSource, /void startVoiceRecording\(int agentIndex, bool announce, const char\* mode/);
+  assert.match(firmwareSource, /waking \|\| voiceStatus\.state == "recording"/);
+});
+
+test("firmware uses left short press for transcription, right hold for cancel, and right press to send", () => {
+  const handleButtons = firmwareSource.match(/void handleButtons\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.match(firmwareSource, /voiceSessionActive/);
+  assert.match(
+    handleButtons,
+    /if \(voiceStatus\.state == "recording"\) \{\s*if \(leftPressed && voiceSessionActive && !voiceSawSpeech\) \{\s*exportVoiceConversation\(\);\s*return;\s*\}\s*if \(leftPressed\) \{\s*stopVoiceRecording\(\);\s*return;\s*\}\s*if \(rightHeld \|\| leftReleasedAfterHold\) \{\s*exitVoiceSession\(\);\s*return;\s*\}\s*return;\s*\}/
+  );
+  assert.doesNotMatch(handleButtons, /if \(leftReleased\) \{\s*stopVoiceRecording\(\);/);
+  assert.match(handleButtons, /rightPressed && voiceStatus\.state == "ready"/);
+  assert.match(firmwareSource, /voice_exit/);
+  assert.match(firmwareSource, /void exportVoiceConversation\(\)/);
+});
+
+test("ready transcript send does not block double-right unified wake", () => {
+  const handleButtons = firmwareSource.match(/void handleButtons\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.match(firmwareSource, /voiceSendPending/);
+  assert.match(firmwareSource, /handlePendingVoiceSend/);
+  assert.match(handleButtons, /scheduleVoiceSend\(\)/);
+  assert.match(handleButtons, /cancelPendingVoiceSend\(\)/);
+  assert.match(handleButtons, /wakeVoiceAssistant\(activeAgentIndex\)/);
+  assert.ok(
+    handleButtons.indexOf("cancelPendingVoiceSend()") < handleButtons.indexOf("wakeVoiceAssistant(activeAgentIndex)"),
+    "double-right should cancel pending send before unified wake"
+  );
+  assert.doesNotMatch(handleButtons, /buttonIndex == 0 \? activeAgentIndex : 1/);
+});
+
+test("dashboard left single cycles agents and left double starts dictation without conflict", () => {
+  const handleButtons = firmwareSource.match(/void handleButtons\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.match(firmwareSource, /void toggleActiveAgent\(\)/);
+  assert.match(firmwareSource, /activeAgentIndex = activeAgentIndex == 0 \? 1 : 0/);
+  assert.match(firmwareSource, /void scheduleAgentSwitch\(\)/);
+  assert.match(firmwareSource, /void handlePendingAgentSwitch\(\)/);
+  assert.match(handleButtons, /if \(leftPressed\) \{\s*scheduleAgentSwitch\(\);\s*return;\s*\}/);
+  assert.match(handleButtons, /if \(!leftPressed && !rightPressed\) \{\s*return;\s*\}/);
+  assert.ok(
+    handleButtons.indexOf("if (!leftPressed && !rightPressed)") < handleButtons.indexOf("const int buttonIndex"),
+    "release-only events should not cancel pending left-button agent switches"
+  );
+  assert.match(handleButtons, /if \(buttonIndex == 0\) \{\s*needsFullRedraw = true;\s*startVoiceRecording\(activeAgentIndex, false, "dictate"\);\s*return;\s*\}/);
+  assert.doesNotMatch(handleButtons, /if \(rightPressed && voiceStatus\.state == "idle"\)/);
+  assert.match(handleButtons, /wakeVoiceAssistant\(activeAgentIndex\)/);
+  assert.doesNotMatch(handleButtons, /activeAgentIndex = buttonIndex;\s*needsFullRedraw = true;\s*lastVoiceButtonIndex = buttonIndex;/);
+});
+
+test("firmware displays ASR latency while transcribing and after status updates", () => {
+  assert.match(firmwareSource, /asrLatencyMs/);
+  assert.match(firmwareSource, /asrTranscribingStartedAt/);
+  assert.match(firmwareSource, /source\["asr"\]\["latencyMs"\]/);
+  assert.match(firmwareSource, /voiceLatencyText/);
+  assert.match(firmwareSource, /drawString\("ASR " \+ voiceLatencyText\(\), cx, cy \+ 42\)/);
+  assert.match(firmwareSource, /voiceStatus\.state == "transcribing" && voiceStatus\.asrTranscribingStartedAt > 0/);
+});
+
+test("firmware no longer uses the old short-pause dictation timeout constants", () => {
+  assert.doesNotMatch(firmwareSource, /VOICE_SILENCE_STOP_MS/);
+  assert.doesNotMatch(firmwareSource, /VOICE_NO_SPEECH_STOP_MS/);
+  assert.match(firmwareSource, /VOICE_SPEECH_RMS_THRESHOLD/);
+  assert.match(firmwareSource, /voiceSawSpeech/);
+  assert.match(firmwareSource, /lastVoiceSpeechAt/);
+  assert.match(firmwareSource, /voiceChunkRms/);
+  assert.doesNotMatch(firmwareSource, /VOICE_NO_SPEECH_STOP_MS/);
+});
+
+test("firmware auto-finalizes conversation turns and exports the session from idle listening", () => {
+  const handleButtons = firmwareSource.match(/void handleButtons\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  const handleRecording = firmwareSource.match(/void handleVoiceRecording\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.match(firmwareSource, /VOICE_DICTATION_SILENCE_STOP_MS = 1800/);
+  assert.match(firmwareSource, /VOICE_CONVERSATION_SILENCE_STOP_MS = 1600/);
+  assert.match(firmwareSource, /VOICE_CONVERSATION_SILENCE_STOP_MS/);
+  assert.match(firmwareSource, /void exportVoiceConversation\(\)/);
+  assert.match(firmwareSource, /voice_export/);
+  assert.match(handleButtons, /if \(leftPressed && voiceSessionActive && !voiceSawSpeech\) \{\s*exportVoiceConversation\(\);\s*return;\s*\}/);
+  assert.match(handleRecording, /voiceConversationMode\s*\?\s*VOICE_CONVERSATION_SILENCE_STOP_MS\s*:\s*VOICE_DICTATION_SILENCE_STOP_MS/);
+  assert.match(handleRecording, /voiceSawSpeech && millis\(\) - lastVoiceSpeechAt > silenceStopMs/);
 });
 
 test("README documents config screen controls", () => {
@@ -164,4 +311,6 @@ test("README documents config screen controls", () => {
   assert.match(readme, /Long-press right connects/);
   assert.match(readme, /Tap a Wi-Fi name/);
   assert.match(readme, /Tap keyboard characters/);
+  assert.match(readme, /Device WS reconnect/);
+  assert.match(readme, /Device WebSocket connection state/);
 });

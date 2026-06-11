@@ -983,17 +983,20 @@ void handleButtons() {
   }
 
   if (doublePressed) {
-    cancelPendingVoiceSend();
     cancelPendingAgentSwitch();
     lastVoiceButtonIndex = -1;
     lastVoiceButtonPress = 0;
     if (buttonIndex == 0) {
+      cancelPendingVoiceSend();
       needsFullRedraw = true;
       startVoiceRecording(activeAgentIndex, false, "dictate");
       return;
     }
-    needsFullRedraw = true;
-    wakeVoiceAssistant(activeAgentIndex);
+    if (voiceStatus.state == "ready") {
+      sendVoiceTranscript();
+      return;
+    }
+    cancelPendingVoiceSend();
     return;
   }
 

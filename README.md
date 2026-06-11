@@ -92,12 +92,11 @@ The npm package is not published yet. The current install surface is the npm-sty
 
 ## Voice Modes
 
-Baize Watch has two voice workflows. They are intentionally separate so casual conversation does not accidentally paste text into a work chat.
+Baize Watch uses one-shot dictation as the default voice workflow so speech does not accidentally enter a continuous assistant loop.
 
 | Mode | Entry | Behavior |
 |---|---|---|
 | Dictation/input | Double-press left | Record one instruction, transcribe Chinese, normalize command text, paste into the focused Codex, Claude Code, Terminal, WeChat, Feishu, or other chat input, then wait for right-button send |
-| Conversation assistant | Double-press right | Speak `我是傻妞，你的智能秘书。`, listen, transcribe, reply through the device speaker, show thinking state while the model/TTS is working, then resume listening |
 
 Button behavior on the dashboard:
 
@@ -105,7 +104,7 @@ Button behavior on the dashboard:
 |---|---|
 | Single-press left on the dashboard | Cycle between Codex and Claude Code after the double-press window passes |
 | Double-press left | Start one-shot dictation/input mode |
-| Double-press right | Wake the current face for continuous conversation |
+| Double-press right | Disabled by default; it does not start continuous conversation |
 | Short-press left while recording | Stop, transcribe, and process the current turn |
 | Press right when transcript is ready | Send Return in the focused input |
 | Long-press while recording | Exit the active voice session |

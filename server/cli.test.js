@@ -14,6 +14,7 @@ test("package exposes an npx-friendly baize-watch command", () => {
   assert.ok(packageJson.files?.includes("server/index.js"));
   assert.ok(packageJson.files?.includes("server/cli.js"));
   assert.ok(packageJson.files?.includes("server/claude-statusline.js"));
+  assert.ok(packageJson.files?.includes("server/codex-rate-limits.js"));
   assert.ok(packageJson.files?.includes("server/public/"));
   assert.ok(existsSync(new URL("../bin/baize-watch.js", import.meta.url)));
 });

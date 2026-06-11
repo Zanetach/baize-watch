@@ -14,6 +14,7 @@
     "server/agent-freshness.js",
     "server/app-targets.js",
     "server/claude-statusline.js",
+    "server/codex-rate-limits.js",
     "server/focused-input.js",
     "server/index.js",
     "server/cli.js",

@@ -33,6 +33,7 @@ import {
 } from "./tts.js";
 import { createSingleFlightTtlCache } from "./status-cache.js";
 import { readClaudeStatusLineSnapshot } from "./claude-statusline.js";
+import { isBetterCodexRateLimitEntry } from "./codex-rate-limits.js";
 import { buildClaudeUsageWindows, buildCodexUsageWindows, buildRollingUsageWindows } from "./usage-windows.js";
 import { agentFreshness } from "./agent-freshness.js";
 import { activationNameForTargetApp, buildPasteScript } from "./app-targets.js";
@@ -888,7 +889,7 @@ async function readCodexRateLimitStatus() {
 
     for (const file of files) {
       const entry = await readLatestCodexRateLimits(file.path);
-      if (entry && (!newest || entry.timestampMs > newest.timestampMs)) {
+      if (isBetterCodexRateLimitEntry(entry, newest)) {
         newest = entry;
       }
     }
@@ -913,6 +914,7 @@ async function readLatestCodexRateLimits(file) {
   try {
     const raw = await readFile(file, "utf8");
     const lines = raw.trim().split("\n");
+    let best = null;
 
     for (let index = lines.length - 1; index >= 0; index--) {
       let entry;
@@ -926,11 +928,19 @@ async function readLatestCodexRateLimits(file) {
       if (!rateLimits) continue;
 
       const timestampMs = Date.parse(entry.timestamp || entry?.payload?.timestamp || "");
-      return {
+      const candidate = {
         rateLimits,
         timestampMs: Number.isFinite(timestampMs) ? timestampMs : 0
       };
+      if (isBetterCodexRateLimitEntry(candidate, best)) {
+        best = candidate;
+      }
+      if (String(rateLimits.limit_id || "").toLowerCase() === "codex") {
+        return best;
+      }
     }
+
+    return best;
   } catch {
     return null;
   }

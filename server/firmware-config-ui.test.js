@@ -231,15 +231,24 @@ test("firmware uses left short press for transcription, right hold for cancel, a
   assert.match(firmwareSource, /void exportVoiceConversation\(\)/);
 });
 
-test("right double press does not wake continuous conversation", () => {
+test("right double press wakes conversation only when server config enables it", () => {
   const handleButtons = firmwareSource.match(/void handleButtons\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
 
+  assert.match(firmwareSource, /bool conversationWakeEnabled = false/);
+  assert.match(firmwareSource, /source\["conversationWakeEnabled"\]\.as<bool>\(\)/);
   assert.match(firmwareSource, /voiceSendPending/);
   assert.match(firmwareSource, /handlePendingVoiceSend/);
   assert.match(handleButtons, /scheduleVoiceSend\(\)/);
   assert.match(handleButtons, /cancelPendingVoiceSend\(\)/);
   assert.match(handleButtons, /if \(voiceStatus\.state == "ready"\) \{\s*sendVoiceTranscript\(\);\s*return;\s*\}/);
-  assert.doesNotMatch(handleButtons, /wakeVoiceAssistant\(activeAgentIndex\)/);
+  assert.match(
+    handleButtons,
+    /if \(voiceStatus\.conversationWakeEnabled\) \{\s*needsFullRedraw = true;\s*wakeVoiceAssistant\(activeAgentIndex\);\s*\}/
+  );
+  assert.ok(
+    handleButtons.indexOf('if (voiceStatus.state == "ready")') < handleButtons.indexOf("if (voiceStatus.conversationWakeEnabled)"),
+    "ready transcript sending should take priority over conversation wake"
+  );
   assert.doesNotMatch(handleButtons, /buttonIndex == 0 \? activeAgentIndex : 1/);
 });
 
@@ -258,7 +267,7 @@ test("dashboard left single cycles agents and left double starts dictation witho
   );
   assert.match(handleButtons, /if \(buttonIndex == 0\) \{\s*cancelPendingVoiceSend\(\);\s*needsFullRedraw = true;\s*startVoiceRecording\(activeAgentIndex, false, "dictate"\);\s*return;\s*\}/);
   assert.doesNotMatch(handleButtons, /if \(rightPressed && voiceStatus\.state == "idle"\)/);
-  assert.doesNotMatch(handleButtons, /wakeVoiceAssistant\(activeAgentIndex\)/);
+  assert.match(handleButtons, /voiceStatus\.conversationWakeEnabled/);
   assert.doesNotMatch(handleButtons, /activeAgentIndex = buttonIndex;\s*needsFullRedraw = true;\s*lastVoiceButtonIndex = buttonIndex;/);
 });
 

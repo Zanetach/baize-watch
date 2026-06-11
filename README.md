@@ -104,7 +104,7 @@ Button behavior on the dashboard:
 |---|---|
 | Single-press left on the dashboard | Cycle between Codex and Claude Code after the double-press window passes |
 | Double-press left | Start one-shot dictation/input mode |
-| Double-press right | Disabled by default; it does not start continuous conversation |
+| Double-press right | Controlled by `MONITOR_CONVERSATION_WAKE_ENABLED`; disabled by default |
 | Short-press left while recording | Stop, transcribe, and process the current turn |
 | Press right when transcript is ready | Send Return in the focused input |
 | Long-press while recording | Exit the active voice session |
@@ -138,6 +138,7 @@ MONITOR_ALIYUN_TTS_VOLUME=100
 MONITOR_TTS_CHUNK_BYTES=4096
 MONITOR_TTS_GAIN=4.8
 MONITOR_DEVICE_WAKE_CUE=0
+MONITOR_CONVERSATION_WAKE_ENABLED=0
 MONITOR_WAKE_GREETING=我是傻妞，你的智能秘书。
 MONITOR_WAKE_TTS_VOLUME=100
 MONITOR_WAKE_TTS_GAIN=4.8
@@ -170,6 +171,7 @@ Quality settings:
 | `MONITOR_TTS_CHUNK_BYTES` | `4096` | Send larger PCM chunks to reduce device WebSocket message overhead |
 | `MONITOR_TTS_GAIN` | `4.8` | Boost Baize Watch speaker PCM output before sending audio chunks |
 | `MONITOR_DEVICE_WAKE_CUE` | `0` | Use cloud TTS for the wake greeting; set `1` for a faster local cue |
+| `MONITOR_CONVERSATION_WAKE_ENABLED` | `0` | Allow double-press right to wake continuous conversation when set to `1` |
 | `MONITOR_WAKE_TTS_GAIN` | `4.8` | Separate gain for the wake greeting |
 
 Test device speech without recording:

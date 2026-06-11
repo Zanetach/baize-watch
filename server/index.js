@@ -86,6 +86,7 @@ const ttsGain = Number.parseFloat(process.env.MONITOR_TTS_GAIN || "4.8");
 const wakeTtsGain = Number.parseFloat(process.env.MONITOR_WAKE_TTS_GAIN || "4.8");
 const wakeTtsVolume = Number.parseInt(process.env.MONITOR_WAKE_TTS_VOLUME || "100", 10);
 const deviceWakeCue = shouldUseDeviceWakeCue(process.env);
+const conversationWakeEnabled = parseBooleanEnv(process.env.MONITOR_CONVERSATION_WAKE_ENABLED, false);
 const displayTimeZone = process.env.MONITOR_DISPLAY_TIME_ZONE ||
   Intl.DateTimeFormat().resolvedOptions().timeZone ||
   "Asia/Shanghai";
@@ -649,7 +650,7 @@ async function collectStatus() {
     battery,
     git,
     agents,
-    voice: { ...currentVoiceStatus(), provider: sttProvider, deviceWakeCue },
+    voice: { ...currentVoiceStatus(), provider: sttProvider, deviceWakeCue, conversationWakeEnabled },
     alerts: buildAlerts({ cpuPercent, memoryPercent: memory.percent, battery, git, agents })
   };
 }

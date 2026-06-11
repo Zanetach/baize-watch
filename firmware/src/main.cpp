@@ -66,6 +66,7 @@ struct VoiceStatus {
   String text = "";
   String error = "";
   bool deviceWakeCue = false;
+  bool conversationWakeEnabled = false;
   uint32_t asrLatencyMs = 0;
   bool hasAsrLatency = false;
   unsigned long asrTranscribingStartedAt = 0;
@@ -886,6 +887,9 @@ void parseVoice(JsonVariant source) {
   if (!source["deviceWakeCue"].isNull()) {
     voiceStatus.deviceWakeCue = source["deviceWakeCue"].as<bool>();
   }
+  if (!source["conversationWakeEnabled"].isNull()) {
+    voiceStatus.conversationWakeEnabled = source["conversationWakeEnabled"].as<bool>();
+  }
 
   if (!source["asr"]["latencyMs"].isNull()) {
     voiceStatus.asrLatencyMs = source["asr"]["latencyMs"].as<uint32_t>();
@@ -997,6 +1001,10 @@ void handleButtons() {
       return;
     }
     cancelPendingVoiceSend();
+    if (voiceStatus.conversationWakeEnabled) {
+      needsFullRedraw = true;
+      wakeVoiceAssistant(activeAgentIndex);
+    }
     return;
   }
 

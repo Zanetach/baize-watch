@@ -58,6 +58,7 @@ test("CLI module renders default native Doubao ASR environment without leaking a
   assert.match(envFile, /MONITOR_TTS_CHUNK_BYTES=4096/);
   assert.match(envFile, /MONITOR_TTS_GAIN=4\.8/);
   assert.match(envFile, /MONITOR_DEVICE_WAKE_CUE=0/);
+  assert.match(envFile, /MONITOR_CONVERSATION_WAKE_ENABLED=0/);
   assert.match(envFile, /MONITOR_WAKE_GREETING=我是傻妞，你的智能秘书。/);
   assert.match(envFile, /MONITOR_WAKE_TTS_VOLUME=100/);
   assert.match(envFile, /MONITOR_WAKE_TTS_GAIN=4\.8/);

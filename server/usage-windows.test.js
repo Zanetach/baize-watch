@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildClaudeUsageWindows,
   buildCodexUsageWindow,
   buildRollingUsageWindows,
   formatResetTextForWindow
@@ -62,6 +63,38 @@ test("rolling usage windows use compact rolling labels for non-reset providers",
       remainingPercent: 5,
       resetAt: null,
       resetText: "roll"
+    }
+  ]);
+});
+
+test("Claude official subscription windows show reset labels instead of rolling labels", () => {
+  assert.deepEqual(buildClaudeUsageWindows({
+    five_hour: {
+      used_percentage: 39,
+      resets_at: 1781181793
+    },
+    seven_day: {
+      used_percentage: 10,
+      resets_at: 1781755233
+    }
+  }, { timeZone: "Asia/Shanghai" }), [
+    {
+      kind: "primary",
+      label: "5h",
+      windowMinutes: 300,
+      usedPercent: 39,
+      remainingPercent: 61,
+      resetAt: "2026-06-11T12:43:13.000Z",
+      resetText: "20:43"
+    },
+    {
+      kind: "secondary",
+      label: "7d",
+      windowMinutes: 10080,
+      usedPercent: 10,
+      remainingPercent: 90,
+      resetAt: "2026-06-18T04:00:33.000Z",
+      resetText: "6/18"
     }
   ]);
 });

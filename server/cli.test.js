@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
@@ -10,6 +13,7 @@ test("package exposes an npx-friendly baize-watch command", () => {
   assert.ok(packageJson.files?.includes("bin/"));
   assert.ok(packageJson.files?.includes("server/index.js"));
   assert.ok(packageJson.files?.includes("server/cli.js"));
+  assert.ok(packageJson.files?.includes("server/claude-statusline.js"));
   assert.ok(packageJson.files?.includes("server/public/"));
   assert.ok(existsSync(new URL("../bin/baize-watch.js", import.meta.url)));
 });
@@ -88,4 +92,34 @@ test("start command reports an already running monitor instead of importing a se
 
   assert.equal(code, 0);
   assert.match(logs.join("\n"), /already running on port 8787/);
+});
+
+test("CLI installs Claude Code statusLine collector without touching unrelated settings", async () => {
+  const { installClaudeStatusLine, serviceDefaults } = await import("./cli.js");
+  const home = await mkdtemp(path.join(os.tmpdir(), "baize-watch-home-"));
+  const paths = serviceDefaults({
+    home,
+    packageRoot: "/opt/baize-watch",
+    nodePath: "/usr/local/bin/node"
+  });
+  const logs = [];
+
+  try {
+    await installClaudeStatusLine({
+      paths,
+      io: {
+        log: (message) => logs.push(String(message))
+      }
+    });
+
+    const settings = JSON.parse(await readFile(paths.claudeSettingsFile, "utf8"));
+    assert.equal(settings.statusLine.type, "command");
+    assert.equal(settings.statusLine.refreshInterval, 5);
+    assert.match(settings.statusLine.command, /\/usr\/local\/bin\/node/);
+    assert.match(settings.statusLine.command, /\/opt\/baize-watch\/bin\/baize-watch\.js/);
+    assert.match(settings.statusLine.command, /claude-statusline/);
+    assert.match(logs.join("\n"), /Installed Claude Code statusLine collector/);
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
 });

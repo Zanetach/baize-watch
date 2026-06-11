@@ -6,6 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import {
+  defaultClaudeStatusLineSnapshotFile,
+  renderClaudeStatusLine,
+  writeClaudeStatusLineSnapshot
+} from "./claude-statusline.js";
 
 const execFile = promisify(execFileCallback);
 const packageRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
@@ -25,6 +30,8 @@ export function serviceDefaults({
     configDir,
     envFile: path.join(configDir, "env"),
     agentStatusFile: path.join(configDir, "agent-status.json"),
+    claudeStatusLineFile: defaultClaudeStatusLineSnapshotFile({ home }),
+    claudeSettingsFile: path.join(home, ".claude", "settings.json"),
     plistPath: path.join(home, "Library", "LaunchAgents", `${serviceLabel}.plist`),
     stdoutPath: path.join(configDir, "baize-watch.log"),
     stderrPath: path.join(configDir, "baize-watch.err.log")
@@ -154,6 +161,18 @@ export async function runCli(argv = process.argv.slice(2), deps = {}) {
     return 0;
   }
 
+  if (command === "install-claude-statusline") {
+    await installClaudeStatusLine({ paths, io });
+    return 0;
+  }
+
+  if (command === "claude-statusline") {
+    const input = await (deps.readStdin || readStdin)();
+    await writeClaudeStatusLineSnapshot(input, { snapshotFile: paths.claudeStatusLineFile });
+    io.log(renderClaudeStatusLine(input));
+    return 0;
+  }
+
   if (command === "uninstall") {
     await uninstallService({ paths, run, platform, io });
     return 0;
@@ -214,6 +233,37 @@ async function installService({ paths, run, platform, io }) {
   io.log(`Logs: ${paths.stdoutPath}`);
 }
 
+export async function installClaudeStatusLine({ paths, io }) {
+  await mkdir(path.dirname(paths.claudeSettingsFile), { recursive: true });
+  await mkdir(path.dirname(paths.claudeStatusLineFile), { recursive: true });
+
+  const command = buildClaudeStatusLineCommand(paths);
+  const settings = await readJsonFile(paths.claudeSettingsFile);
+  const existing = settings.statusLine;
+  const existingCommand = String(existing?.command || "");
+
+  if (existingCommand && existingCommand !== command && !existingCommand.includes("baize-watch")) {
+    throw new Error(`Claude Code already has a custom statusLine command: ${existingCommand}`);
+  }
+
+  settings.statusLine = {
+    ...(existing && typeof existing === "object" ? existing : {}),
+    type: "command",
+    command,
+    refreshInterval: Number.isFinite(Number(existing?.refreshInterval))
+      ? Number(existing.refreshInterval)
+      : 5
+  };
+
+  await writeFile(paths.claudeSettingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+  io.log(`Installed Claude Code statusLine collector`);
+  io.log(`Snapshot: ${paths.claudeStatusLineFile}`);
+}
+
+export function buildClaudeStatusLineCommand(paths) {
+  return `${shellQuote(paths.nodePath)} ${shellQuote(paths.cliPath)} claude-statusline`;
+}
+
 async function uninstallService({ paths, run, platform, io }) {
   await requireMacOS(platform);
   await bootoutService(paths, run);
@@ -244,6 +294,27 @@ async function loadEnvFile(file) {
   } catch {
     // Missing env files are valid for status-only monitor usage.
   }
+}
+
+async function readJsonFile(file) {
+  try {
+    const raw = await readFile(file, "utf8");
+    return JSON.parse(raw || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function readStdin() {
+  return new Promise((resolve, reject) => {
+    let input = "";
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      input += chunk;
+    });
+    process.stdin.on("end", () => resolve(input));
+    process.stdin.on("error", reject);
+  });
 }
 
 async function bootoutService(paths, run) {
@@ -298,12 +369,18 @@ function escapeXml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function shellQuote(value) {
+  return `'${String(value).replaceAll("'", "'\\''")}'`;
+}
+
 function helpText() {
   return `Baize Watch monitor
 
 Usage:
   baize-watch start       Run the desktop monitor in the foreground
   baize-watch install     Install and start the macOS background service
+  baize-watch install-claude-statusline
+                          Capture official Claude Code subscription limits
   baize-watch restart     Restart the background service
   baize-watch stop        Stop the background service
   baize-watch status      Print launchd service status

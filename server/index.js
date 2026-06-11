@@ -32,7 +32,8 @@ import {
   createDoubaoTtsSynthesizer
 } from "./tts.js";
 import { createSingleFlightTtlCache } from "./status-cache.js";
-import { buildCodexUsageWindows, buildRollingUsageWindows } from "./usage-windows.js";
+import { readClaudeStatusLineSnapshot } from "./claude-statusline.js";
+import { buildClaudeUsageWindows, buildCodexUsageWindows, buildRollingUsageWindows } from "./usage-windows.js";
 import { agentFreshness } from "./agent-freshness.js";
 import { activationNameForTargetApp, buildPasteScript } from "./app-targets.js";
 import {
@@ -63,6 +64,7 @@ const agentStatusFile = process.env.MONITOR_AGENT_STATUS_FILE || defaultAgentSta
 const codexStateDb = process.env.MONITOR_CODEX_STATE_DB || `${os.homedir()}/.codex/state_5.sqlite`;
 const codexSessionsDir = process.env.MONITOR_CODEX_SESSIONS_DIR || `${os.homedir()}/.codex/sessions`;
 const claudeProjectsDir = process.env.MONITOR_CLAUDE_PROJECTS_DIR || `${os.homedir()}/.claude/projects`;
+const claudeStatusLineFile = process.env.MONITOR_CLAUDE_STATUSLINE_FILE || `${os.homedir()}/.baize-watch/claude-statusline.json`;
 const codexTokenLimit = Number.parseInt(process.env.MONITOR_CODEX_TOKEN_LIMIT || "200000000", 10);
 const claudeTokenLimit = Number.parseInt(process.env.MONITOR_CLAUDE_TOKEN_LIMIT || "200000", 10);
 const codexWeeklyTokenLimit = Number.parseInt(process.env.MONITOR_CODEX_WEEKLY_TOKEN_LIMIT || "5000000000", 10);
@@ -940,7 +942,10 @@ async function readClaudeTokenStatus() {
   if (process.platform !== "darwin") return {};
 
   try {
-    const files = await listRecentJsonlFiles(claudeProjectsDir, 30);
+    const [files, officialStatus] = await Promise.all([
+      listRecentJsonlFiles(claudeProjectsDir, 30),
+      readClaudeOfficialStatusLineStatus()
+    ]);
     let newest = null;
     let weeklyUsed = 0;
     const trendEvents = [];
@@ -953,6 +958,16 @@ async function readClaudeTokenStatus() {
       if (summary.latest && (!newest || summary.latest.timestampMs > newest.timestampMs)) {
         newest = summary.latest;
       }
+    }
+
+    if (!newest && officialStatus.usageWindows?.length) {
+      return {
+        state: "online",
+        task: officialStatus.task || "",
+        progress: officialStatus.progress,
+        usageWindows: officialStatus.usageWindows,
+        updatedAt: officialStatus.updatedAt
+      };
     }
 
     const nowMs = Date.now();
@@ -970,17 +985,20 @@ async function readClaudeTokenStatus() {
     if (!newest) return {};
     const latestUsed = newest.input + newest.output + newest.cacheCreation + newest.cacheRead;
     const usageUsed = sumTokenPoints(usagePoints);
-    const usageWindows = buildRollingUsageWindows({
+    const rollingUsageWindows = buildRollingUsageWindows({
       primaryUsed: usageUsed,
       primaryLimit: claudeTokenLimit,
       secondaryUsed: weeklyUsed,
       secondaryLimit: claudeWeeklyTokenLimit
     });
+    const usageWindows = officialStatus.usageWindows?.length
+      ? officialStatus.usageWindows
+      : rollingUsageWindows;
 
     return {
       state: "online",
-      task: newest.cwd ? shortPath(newest.cwd) : "",
-      progress: percentFromTokens(weeklyUsed, claudeWeeklyTokenLimit),
+      task: officialStatus.task || (newest.cwd ? shortPath(newest.cwd) : ""),
+      progress: officialStatus.progress ?? percentFromTokens(weeklyUsed, claudeWeeklyTokenLimit),
       tokens: {
         used: usageUsed || latestUsed,
         limit: claudeTokenLimit
@@ -996,11 +1014,24 @@ async function readClaudeTokenStatus() {
         }, weeklyUsed, trendBucketCount)
       },
       usageWindows,
-      updatedAt: new Date(newest.timestampMs).toISOString()
+      updatedAt: officialStatus.updatedAt || new Date(newest.timestampMs).toISOString()
     };
   } catch {
     return {};
   }
+}
+
+async function readClaudeOfficialStatusLineStatus() {
+  const snapshot = await readClaudeStatusLineSnapshot(claudeStatusLineFile);
+  const usageWindows = buildClaudeUsageWindows(snapshot?.rateLimits, { timeZone: displayTimeZone });
+  if (!usageWindows.length) return {};
+
+  return {
+    task: snapshot?.cwd ? shortPath(snapshot.cwd) : "",
+    progress: usageWindows[1]?.usedPercent ?? usageWindows[0]?.usedPercent ?? null,
+    usageWindows,
+    updatedAt: snapshot?.capturedAt || null
+  };
 }
 
 function sumTokenPoints(points) {

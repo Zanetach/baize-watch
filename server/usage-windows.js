@@ -6,6 +6,24 @@ export function buildCodexUsageWindows(rateLimits, options = {}) {
   ].filter(Boolean);
 }
 
+export function buildClaudeUsageWindows(rateLimits, options = {}) {
+  if (!rateLimits) return [];
+  return [
+    buildPercentUsageWindow("primary", {
+      label: "5h",
+      windowMinutes: 300,
+      usedPercent: rateLimits.five_hour?.used_percentage,
+      resetsAt: rateLimits.five_hour?.resets_at
+    }, options),
+    buildPercentUsageWindow("secondary", {
+      label: "7d",
+      windowMinutes: 10080,
+      usedPercent: rateLimits.seven_day?.used_percentage,
+      resetsAt: rateLimits.seven_day?.resets_at
+    }, options)
+  ].filter(Boolean);
+}
+
 export function buildRollingUsageWindows({
   primaryUsed,
   primaryLimit,
@@ -41,13 +59,29 @@ export function buildCodexUsageWindow(kind, limit, options = {}) {
 
   const windowMinutes = numberOrNull(limit?.window_minutes);
   const resetsAt = numberOrNull(limit?.resets_at);
+  return buildPercentUsageWindow(kind, {
+    label: null,
+    windowMinutes,
+    usedPercent,
+    resetsAt
+  }, options);
+}
+
+function buildPercentUsageWindow(kind, {
+  label,
+  windowMinutes,
+  usedPercent,
+  resetsAt
+} = {}, options = {}) {
+  const percent = numberOrNull(usedPercent);
+  if (percent === null) return null;
 
   return {
     kind,
-    label: formatWindowLabel(windowMinutes, kind),
+    label: label || formatWindowLabel(windowMinutes, kind),
     windowMinutes,
-    usedPercent: clampPercent(usedPercent),
-    remainingPercent: clampPercent(100 - usedPercent),
+    usedPercent: clampPercent(percent),
+    remainingPercent: clampPercent(100 - percent),
     resetAt: timestampFromSeconds(resetsAt),
     resetText: formatResetTextForWindow(resetsAt, { ...options, kind, windowMinutes })
   };

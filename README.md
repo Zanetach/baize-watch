@@ -83,6 +83,7 @@ The installer writes local runtime files outside the repository:
 |---|---|
 | `~/.baize-watch/env` | Local runtime config and API keys |
 | `~/.baize-watch/agent-status.json` | Optional manual Codex / Claude Code status overrides |
+| `~/.baize-watch/claude-statusline.json` | Optional Claude Code official subscription rate-limit snapshot |
 | `~/Library/LaunchAgents/com.zane.baize-watch.plist` | macOS background service |
 | `~/.baize-watch/baize-watch.log` | Service stdout |
 | `~/.baize-watch/baize-watch.err.log` | Service stderr |
@@ -187,7 +188,17 @@ The service builds each agent status from local readers first, then optional man
 | Agent | Automatic source |
 |---|---|
 | Codex | `~/.codex/state_5.sqlite` and `~/.codex/sessions/**/*.jsonl` |
-| Claude Code | `~/.claude/projects/**/*.jsonl` |
+| Claude Code | `~/.claude/projects/**/*.jsonl`, plus optional Claude Code `statusLine` snapshots for official Claude.ai subscription limits |
+
+For Claude Code, Baize Watch uses official subscription limit windows when Claude Code exposes `rate_limits` through its `statusLine` input. Without that field, it falls back to local rolling usage totals from project JSONL files.
+
+Install the statusLine collector:
+
+```bash
+baize-watch install-claude-statusline
+```
+
+After the next Claude Code response, the collector writes `~/.baize-watch/claude-statusline.json`. If the snapshot includes official `five_hour` and `seven_day` rate-limit windows, the device shows the official reset labels. If not, the device shows `5h` / `7d` rolling usage.
 
 Manual overrides live in `server/agent-status.json` for development or `~/.baize-watch/agent-status.json` for the LaunchAgent install.
 

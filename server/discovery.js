@@ -1,8 +1,8 @@
 import dgram from "node:dgram";
 import os from "node:os";
 
-export const DISCOVERY_REQUEST = "stopwatch-monitor-discover-v1";
-export const DISCOVERY_RESPONSE_TYPE = "stopwatch_monitor";
+export const DISCOVERY_REQUEST = "baize-watch-discover-v1";
+export const DISCOVERY_RESPONSE_TYPE = "baize_watch";
 
 export function getLocalAddresses(networkInterfaces = os.networkInterfaces()) {
   const addresses = [];
@@ -68,7 +68,7 @@ export function createDiscoveryResponder({
         } catch {
           // Broadcast support can vary by interface; unicast replies still work.
         }
-        logger.log?.(`StopWatch discovery listening on UDP ${discoveryPort}`);
+        logger.log?.(`Baize Watch discovery listening on UDP ${discoveryPort}`);
       });
     },
     close() {

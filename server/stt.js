@@ -142,7 +142,7 @@ export async function transcribeWithOpenAI(audio, {
   form.set("model", model);
   form.set("language", language);
   form.set("prompt", prompt);
-  form.set("file", new Blob([audio], { type: "audio/wav" }), "stopwatch-voice.wav");
+  form.set("file", new Blob([audio], { type: "audio/wav" }), "baize-watch-voice.wav");
 
   const response = await fetchImpl("https://api.openai.com/v1/audio/transcriptions", {
     method: "POST",
@@ -855,7 +855,7 @@ function buildDoubaoHeaders({ apiKey, resourceId }) {
 function buildDoubaoNativeInitRequest({ model, sampleRate }) {
   return {
     user: {
-      uid: "stopwatch-monitor"
+      uid: "baize-watch"
     },
     audio: {
       format: "pcm",

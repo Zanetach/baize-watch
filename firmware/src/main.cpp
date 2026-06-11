@@ -22,7 +22,7 @@ using namespace websockets;
 constexpr size_t MAX_TREND_POINTS = 12;
 
 struct MonitorStatus {
-  String label = "StopWatch";
+  String label = "Baize Watch";
   String time = "--";
   String gitBranch = "--";
   int cpu = 0;
@@ -166,7 +166,7 @@ constexpr unsigned long DASHBOARD_ANIMATION_MS = 360;
 constexpr unsigned long LOGO_ANIMATION_MS = 180;
 constexpr uint16_t DISCOVERY_PORT = 8788;
 constexpr unsigned long DISCOVERY_TIMEOUT_MS = 1400;
-constexpr const char* DISCOVERY_REQUEST = "stopwatch-monitor-discover-v1";
+constexpr const char* DISCOVERY_REQUEST = "baize-watch-discover-v1";
 constexpr const char* KEYBOARD_CHARS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.@#$%&*!?+/";
 constexpr const char* KEYBOARD_PAGES[] = {
   "abcdefghijklm",
@@ -417,7 +417,7 @@ void loop() {
   }
 
   if (websocketConnected && millis() - lastHeartbeat > 10000) {
-    client.send("{\"type\":\"heartbeat\",\"device\":\"m5stack-stopwatch\"}");
+    client.send("{\"type\":\"heartbeat\",\"device\":\"baize-watch\"}");
     lastHeartbeat = millis();
   }
 
@@ -484,7 +484,7 @@ bool waitForWiFi(unsigned long timeoutMs, const String& label) {
 
 bool startWiFiSetupPortal() {
   drawBootScreen("Wi-Fi setup");
-  drawCenteredText("Join StopWatch-Setup", 306, &fonts::Font2, COLOR_TEXT);
+  drawCenteredText("Join BaizeWatch-Setup", 306, &fonts::Font2, COLOR_TEXT);
   drawCenteredText("Open 192.168.4.1", 330, &fonts::Font2, COLOR_MUTED);
 
   WiFiManager wifiManager;
@@ -492,8 +492,8 @@ bool startWiFiSetupPortal() {
   wifiManager.setConfigPortalTimeout(300);
   wifiManager.setConnectTimeout(20);
 
-  Serial.println("Starting Wi-Fi setup portal: StopWatch-Setup");
-  const bool connected = wifiManager.startConfigPortal("StopWatch-Setup");
+  Serial.println("Starting Wi-Fi setup portal: BaizeWatch-Setup");
+  const bool connected = wifiManager.startConfigPortal("BaizeWatch-Setup");
   if (!connected) {
     drawBootScreen("Wi-Fi failed");
     Serial.println("Wi-Fi setup portal timed out or failed.");
@@ -610,7 +610,7 @@ void connectWebSocket() {
     return;
   }
 
-  client.send("{\"type\":\"hello\",\"device\":\"m5stack-stopwatch\"}");
+  client.send("{\"type\":\"hello\",\"device\":\"baize-watch\"}");
   Serial.println("WebSocket connected.");
   needsFullRedraw = true;
 }
@@ -652,7 +652,7 @@ String discoverMonitorWebSocketUrl(unsigned long timeoutMs) {
 
     const String type = doc["type"] | "";
     const String wsUrl = doc["wsUrl"] | "";
-    if (type == "stopwatch_monitor" && wsUrl.startsWith("ws://")) {
+    if (type == "baize_watch" && wsUrl.startsWith("ws://")) {
       discoveryUdp.stop();
       Serial.print("Discovered monitor: ");
       Serial.println(wsUrl);

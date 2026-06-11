@@ -2,10 +2,10 @@
   "name": "baize-watch",
   "version": "0.1.0",
   "private": false,
-  "description": "Local AI agent status and voice companion for the M5Stack StopWatch.",
+  "description": "Local AI agent status and voice companion for Baize Watch devices.",
   "type": "module",
   "bin": {
-    "stopwatch-monitor": "bin/stopwatch-monitor.js"
+    "baize-watch": "bin/baize-watch.js"
   },
   "files": [
     "bin/",
@@ -30,8 +30,8 @@
     "README.md"
   ],
   "scripts": {
-    "start": "node bin/stopwatch-monitor.js start",
-    "service": "node bin/stopwatch-monitor.js",
+    "start": "node bin/baize-watch.js start",
+    "service": "node bin/baize-watch.js",
     "dev": "node --watch server/index.js",
     "test": "node --test server/*.test.js"
   },

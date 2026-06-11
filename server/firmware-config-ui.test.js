@@ -15,7 +15,7 @@ test("firmware exposes a separate config screen without replacing dashboard mode
 test("firmware provides Wi-Fi setup portal for scan, selection, password entry, and DHCP", () => {
   assert.match(firmwareSource, /#include <WiFiManager\.h>/);
   assert.match(firmwareSource, /startWiFiSetupPortal/);
-  assert.match(firmwareSource, /StopWatch-Setup/);
+  assert.match(firmwareSource, /BaizeWatch-Setup/);
   assert.match(firmwareSource, /startConfigPortal/);
   assert.match(firmwareSource, /WiFi\.localIP\(\)/);
 });
@@ -25,7 +25,7 @@ test("firmware discovers the desktop monitor over LAN before using the fallback 
   assert.match(firmwareSource, /DISCOVERY_PORT = 8788/);
   assert.match(firmwareSource, /discoverMonitorWebSocketUrl/);
   assert.match(firmwareSource, /currentMonitorWsUrl/);
-  assert.match(firmwareSource, /stopwatch-monitor-discover-v1/);
+  assert.match(firmwareSource, /baize-watch-discover-v1/);
   assert.match(firmwareSource, /client\.connect\(currentMonitorWsUrl\)/);
   assert.doesNotMatch(firmwareSource, /client\.connect\(MONITOR_WS_URL\)/);
 });
@@ -40,7 +40,7 @@ test("firmware supports on-device Wi-Fi scanning and password keyboard", () => {
   assert.match(firmwareSource, /connectSelectedWiFi/);
 });
 
-test("firmware uses the StopWatch touch screen for Wi-Fi selection and password entry", () => {
+test("firmware uses the Baize Watch touch screen for Wi-Fi selection and password entry", () => {
   assert.match(firmwareSource, /handleTouchInput/);
   assert.match(firmwareSource, /M5\.Touch\.getDetail\(\)/);
   assert.match(firmwareSource, /touch\.wasPressed\(\)/);
@@ -186,7 +186,7 @@ test("dashboard logo uses a nonzero animation offset instead of a static logo dr
   assert.doesNotMatch(firmwareSource, /drawAnimatedLogo\(agent, logo, 0\)/);
 });
 
-test("firmware plays assistant TTS audio on the StopWatch speaker", () => {
+test("firmware plays assistant TTS audio on the Baize Watch speaker", () => {
   assert.match(firmwareSource, /#include <mbedtls\/base64\.h>/);
   assert.match(firmwareSource, /handleTtsStart/);
   assert.match(firmwareSource, /handleTtsAudio/);
@@ -303,7 +303,7 @@ test("README documents config screen controls", () => {
   assert.match(readme, /Long-press either programmable button/);
   assert.match(readme, /Left button moves selection/);
   assert.match(readme, /Right button runs the selected action/);
-  assert.match(readme, /StopWatch-Setup/);
+  assert.match(readme, /BaizeWatch-Setup/);
   assert.match(readme, /select a scanned Wi-Fi network/);
   assert.match(readme, /enter the password/);
   assert.match(readme, /on-device Wi-Fi setup/);

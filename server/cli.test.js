@@ -4,34 +4,34 @@ import test from "node:test";
 
 const packageJson = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 
-test("package exposes an npx-friendly stopwatch-monitor command", () => {
+test("package exposes an npx-friendly baize-watch command", () => {
   assert.equal(packageJson.private, false);
-  assert.equal(packageJson.bin?.["stopwatch-monitor"], "bin/stopwatch-monitor.js");
+  assert.equal(packageJson.bin?.["baize-watch"], "bin/baize-watch.js");
   assert.ok(packageJson.files?.includes("bin/"));
   assert.ok(packageJson.files?.includes("server/index.js"));
   assert.ok(packageJson.files?.includes("server/cli.js"));
   assert.ok(packageJson.files?.includes("server/public/"));
-  assert.ok(existsSync(new URL("../bin/stopwatch-monitor.js", import.meta.url)));
+  assert.ok(existsSync(new URL("../bin/baize-watch.js", import.meta.url)));
 });
 
 test("CLI module builds a macOS LaunchAgent for background service mode", async () => {
   const { buildLaunchAgentPlist, serviceDefaults } = await import("./cli.js");
   const paths = serviceDefaults({
     home: "/Users/example",
-    packageRoot: "/opt/stopwatch-monitor",
+    packageRoot: "/opt/baize-watch",
     nodePath: "/usr/local/bin/node"
   });
 
   const plist = buildLaunchAgentPlist(paths);
 
-  assert.match(plist, /com\.zane\.stopwatch-monitor/);
+  assert.match(plist, /com\.zane\.baize-watch/);
   assert.match(plist, /\/usr\/local\/bin\/node/);
-  assert.match(plist, /\/opt\/stopwatch-monitor\/bin\/stopwatch-monitor\.js/);
+  assert.match(plist, /\/opt\/baize-watch\/bin\/baize-watch\.js/);
   assert.match(plist, /<string>start<\/string>/);
   assert.match(plist, /RunAtLoad/);
   assert.match(plist, /KeepAlive/);
-  assert.match(plist, /\/Users\/example\/\.stopwatch-monitor\/stopwatch-monitor\.log/);
-  assert.match(plist, /\/Users\/example\/\.stopwatch-monitor\/stopwatch-monitor\.err\.log/);
+  assert.match(plist, /\/Users\/example\/\.baize-watch\/baize-watch\.log/);
+  assert.match(plist, /\/Users\/example\/\.baize-watch\/baize-watch\.err\.log/);
 });
 
 test("CLI module renders default native Doubao ASR environment without leaking a placeholder key", async () => {
@@ -74,7 +74,7 @@ test("start command reports an already running monitor instead of importing a se
   const code = await runCli(["start"], {
     paths: {
       home: "/Users/example",
-      packageRoot: "/opt/stopwatch-monitor",
+      packageRoot: "/opt/baize-watch",
       nodePath: "/usr/local/bin/node"
     },
     isPortListening: async (port) => port === 8787,

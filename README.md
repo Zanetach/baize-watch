@@ -4,7 +4,7 @@
   <img src="docs/images/readme-hero.svg" alt="Baize Watch dashboard preview" width="100%">
 </p>
 
-Baize Watch turns an M5Stack StopWatch into a local desktop companion for Codex and Claude Code. The project combines an ESP32-S3 firmware UI, a Node.js macOS service, local token readers, LAN discovery, speech recognition, text insertion, and device speaker playback.
+Baize Watch is a local desktop companion for Codex and Claude Code. The project combines an ESP32-S3 round-screen firmware UI, a Node.js macOS service, local token readers, LAN discovery, speech recognition, text insertion, and device speaker playback.
 
 The core idea is deliberately local-first: the device talks to your Mac over LAN, the Mac reads local Codex / Claude Code state when available, and voice dictation is pasted into the currently focused desktop input.
 
@@ -16,9 +16,9 @@ The core idea is deliberately local-first: the device talks to your Mac over LAN
 | Desktop service | HTTP dashboard, `/status`, `/voice`, `/speak`, WebSocket `/device`, WebSocket `/client`, and UDP LAN discovery |
 | Token data | Codex SQLite/session JSONL readers, Claude Code project JSONL reader, freshness checks, trend buckets, and manual override support |
 | Voice dictation | One-shot Chinese dictation into the focused input, app targeting for Codex, Claude Code, WeChat, Feishu, Terminal, and generic chat windows |
-| Conversation mode | Wake greeting, continuous listen/reply loop, assistant thinking state, StopWatch speaker TTS, and conversation export to the focused input |
-| macOS service | `stopwatch-monitor` CLI, LaunchAgent install, restart/status/log commands, local env file, and System Events paste/send automation |
-| Firmware | PlatformIO firmware for ESP32-S3 / M5Stack StopWatch using M5Unified, ArduinoJson, ArduinoWebsockets, WiFiManager, and on-device Wi-Fi setup |
+| Conversation mode | Wake greeting, continuous listen/reply loop, assistant thinking state, Baize Watch speaker TTS, and conversation export to the focused input |
+| macOS service | `baize-watch` CLI, LaunchAgent install, restart/status/log commands, local env file, and System Events paste/send automation |
+| Firmware | PlatformIO firmware for the Baize Watch ESP32-S3 device using M5Unified, ArduinoJson, ArduinoWebsockets, WiFiManager, and on-device Wi-Fi setup |
 
 ## System Shape
 
@@ -33,7 +33,7 @@ The project is split into a narrow firmware surface and a richer desktop runtime
 | `firmware/src/main.cpp` | Round-screen UI, button/touch flows, microphone capture, speaker playback, LAN discovery, and WebSocket device protocol |
 | `server/index.js` | HTTP/WebSocket monitor service, status aggregation, voice session coordination, TTS dispatch, and device broadcast |
 | `server/stt.js` | ASR providers: Doubao native ASR 2.0, Doubao gateway ASR, Aliyun DashScope realtime ASR, Qwen/Fun-ASR fallback, and OpenAI transcription |
-| `server/tts.js` | Doubao Speech TTS and Aliyun CosyVoice TTS synthesis into PCM for StopWatch playback |
+| `server/tts.js` | Doubao Speech TTS and Aliyun CosyVoice TTS synthesis into PCM for Baize Watch playback |
 | `server/assistant.js` | Short assistant replies for continuous conversation through Aliyun-compatible or Doubao-compatible chat APIs |
 | `server/voice-intent.js` | Command normalization, app routing, exit phrases, and common ASR correction rules |
 | `server/cli.js` | Foreground start, macOS LaunchAgent install/uninstall/restart/status/log commands |
@@ -43,14 +43,14 @@ The project is split into a narrow firmware surface and a richer desktop runtime
 From GitHub:
 
 ```bash
-npx github:Zanetach/stopwatch install
+npx github:Zanetach/baize-watch install
 ```
 
 From a local checkout:
 
 ```bash
-git clone https://github.com/Zanetach/stopwatch.git
-cd stopwatch
+git clone https://github.com/Zanetach/baize-watch.git
+cd baize-watch
 npm install
 npm start
 ```
@@ -68,24 +68,24 @@ The desktop service also answers Baize Watch LAN discovery on UDP `8788`, so the
 The CLI can run the monitor in the foreground or install it as a macOS LaunchAgent.
 
 ```bash
-stopwatch-monitor start
-stopwatch-monitor install
-stopwatch-monitor status
-stopwatch-monitor restart
-stopwatch-monitor stop
-stopwatch-monitor logs
-stopwatch-monitor uninstall
+baize-watch start
+baize-watch install
+baize-watch status
+baize-watch restart
+baize-watch stop
+baize-watch logs
+baize-watch uninstall
 ```
 
 The installer writes local runtime files outside the repository:
 
 | Path | Purpose |
 |---|---|
-| `~/.stopwatch-monitor/env` | Local runtime config and API keys |
-| `~/.stopwatch-monitor/agent-status.json` | Optional manual Codex / Claude Code status overrides |
-| `~/Library/LaunchAgents/com.zane.stopwatch-monitor.plist` | macOS background service |
-| `~/.stopwatch-monitor/stopwatch-monitor.log` | Service stdout |
-| `~/.stopwatch-monitor/stopwatch-monitor.err.log` | Service stderr |
+| `~/.baize-watch/env` | Local runtime config and API keys |
+| `~/.baize-watch/agent-status.json` | Optional manual Codex / Claude Code status overrides |
+| `~/Library/LaunchAgents/com.zane.baize-watch.plist` | macOS background service |
+| `~/.baize-watch/baize-watch.log` | Service stdout |
+| `~/.baize-watch/baize-watch.err.log` | Service stderr |
 
 The npm package is not published yet. The current install surface is the npm-style GitHub CLI plus LaunchAgent.
 
@@ -168,7 +168,7 @@ Quality settings:
 | `MONITOR_VOICE_MIN_RECORDING_MS` | `900` | Reject accidental very short recordings before ASR |
 | `MONITOR_VOICE_MIN_RMS` | `0` | Optional quiet-audio gate; keep `0` unless diagnostics show very low RMS |
 | `MONITOR_TTS_CHUNK_BYTES` | `4096` | Send larger PCM chunks to reduce device WebSocket message overhead |
-| `MONITOR_TTS_GAIN` | `4.8` | Boost StopWatch speaker PCM output before sending audio chunks |
+| `MONITOR_TTS_GAIN` | `4.8` | Boost Baize Watch speaker PCM output before sending audio chunks |
 | `MONITOR_DEVICE_WAKE_CUE` | `0` | Use cloud TTS for the wake greeting; set `1` for a faster local cue |
 | `MONITOR_WAKE_TTS_GAIN` | `4.8` | Separate gain for the wake greeting |
 
@@ -189,7 +189,7 @@ The service builds each agent status from local readers first, then optional man
 | Codex | `~/.codex/state_5.sqlite` and `~/.codex/sessions/**/*.jsonl` |
 | Claude Code | `~/.claude/projects/**/*.jsonl` |
 
-Manual overrides live in `server/agent-status.json` for development or `~/.stopwatch-monitor/agent-status.json` for the LaunchAgent install.
+Manual overrides live in `server/agent-status.json` for development or `~/.baize-watch/agent-status.json` for the LaunchAgent install.
 
 ```bash
 cp server/agent-status.example.json server/agent-status.json
@@ -248,7 +248,7 @@ Edit:
 #define MONITOR_WS_URL "ws://192.168.1.23:8787/device"
 ```
 
-`MONITOR_WS_URL` is only a fallback. The StopWatch first broadcasts `stopwatch-monitor-discover-v1` on UDP `8788`; the desktop service replies with the current `ws://<mac-lan-ip>:8787/device` address. After this firmware is flashed once, normal Mac IP changes should not require another firmware burn.
+`MONITOR_WS_URL` is only a fallback. Baize Watch first broadcasts `baize-watch-discover-v1` on UDP `8788`; the desktop service replies with the current `ws://<mac-lan-ip>:8787/device` address. After this firmware is flashed once, normal Mac IP changes should not require another firmware burn.
 
 Saved Wi-Fi credentials from the on-device setup flow take priority over `secrets.h`.
 
@@ -264,7 +264,7 @@ Saved Wi-Fi credentials from the on-device setup flow take priority over `secret
 | Left button cycles | Move through Wi-Fi names or password characters |
 | Long-press right connects | Connect after password entry |
 
-The configuration screen includes Device WS reconnect, on-device Wi-Fi setup, fallback Wi-Fi portal, Device WebSocket connection state, voice state, device IP, WebSocket URL, and battery status. Device WS reconnect also reruns LAN discovery before using the fallback URL. The browser fallback starts the `StopWatch-Setup` access point; join it, select a scanned Wi-Fi network, enter the password, and let the device reconnect to the desktop WebSocket service.
+The configuration screen includes Device WS reconnect, on-device Wi-Fi setup, fallback Wi-Fi portal, Device WebSocket connection state, voice state, device IP, WebSocket URL, and battery status. Device WS reconnect also reruns LAN discovery before using the fallback URL. The browser fallback starts the `BaizeWatch-Setup` access point; join it, select a scanned Wi-Fi network, enter the password, and let the device reconnect to the desktop WebSocket service.
 
 ## Browser Preview And API
 
@@ -294,8 +294,8 @@ cd firmware && python3 -m platformio run
 Useful local commands:
 
 ```bash
-node bin/stopwatch-monitor.js --help
-node bin/stopwatch-monitor.js start
+node bin/baize-watch.js --help
+node bin/baize-watch.js start
 curl http://localhost:8787/status
 curl http://localhost:8787/voice
 ```

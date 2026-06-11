@@ -24,7 +24,7 @@ test("discovery response includes the current device websocket url", () => {
   });
 
   assert.deepEqual(response, {
-    type: "stopwatch_monitor",
+    type: "baize_watch",
     wsUrl: "ws://192.168.5.36:8787/device"
   });
 });

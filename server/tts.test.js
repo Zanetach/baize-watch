@@ -79,7 +79,7 @@ test("doubao tts synthesizer uses official speech api for uuid api keys", async 
   assert.equal(calls[0].init.headers["X-Api-Resource-Id"], "seed-tts-2.0");
   assert.equal(calls[0].init.headers["X-Api-Request-Id"], "speech-tts-1");
   const body = JSON.parse(calls[0].init.body);
-  assert.equal(body.user.uid, "stopwatch-monitor");
+  assert.equal(body.user.uid, "baize-watch");
   assert.deepEqual(body.req_params, {
     text: "你好，我是傻妞。",
     speaker: "zh_female_jiaochuannv_uranus_bigtts",

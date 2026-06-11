@@ -175,7 +175,7 @@ export async function synthesizeDoubaoSpeechApiKey(text, {
   voice = defaultDoubaoSpeechVoice,
   url = defaultDoubaoSpeechTtsUrl,
   sampleRate = 16000,
-  uid = "stopwatch-monitor",
+  uid = "baize-watch",
   createId = randomUUID,
   fetchImpl = globalThis.fetch
 } = {}) {

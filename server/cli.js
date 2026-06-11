@@ -9,25 +9,25 @@ import { promisify } from "node:util";
 
 const execFile = promisify(execFileCallback);
 const packageRoot = path.resolve(fileURLToPath(new URL("../", import.meta.url)));
-const serviceLabel = "com.zane.stopwatch-monitor";
+const serviceLabel = "com.zane.baize-watch";
 
 export function serviceDefaults({
   home = os.homedir(),
   packageRoot: root = packageRoot,
   nodePath = process.execPath
 } = {}) {
-  const configDir = path.join(home, ".stopwatch-monitor");
+  const configDir = path.join(home, ".baize-watch");
   return {
     label: serviceLabel,
     packageRoot: root,
     nodePath,
-    cliPath: path.join(root, "bin", "stopwatch-monitor.js"),
+    cliPath: path.join(root, "bin", "baize-watch.js"),
     configDir,
     envFile: path.join(configDir, "env"),
     agentStatusFile: path.join(configDir, "agent-status.json"),
     plistPath: path.join(home, "Library", "LaunchAgents", `${serviceLabel}.plist`),
-    stdoutPath: path.join(configDir, "stopwatch-monitor.log"),
-    stderrPath: path.join(configDir, "stopwatch-monitor.err.log")
+    stdoutPath: path.join(configDir, "baize-watch.log"),
+    stderrPath: path.join(configDir, "baize-watch.err.log")
   };
 }
 
@@ -108,7 +108,7 @@ export function buildLaunchAgentPlist(paths) {
   <string>${escapeXml(paths.packageRoot)}</string>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>STOPWATCH_MONITOR_ENV</key>
+    <key>BAIZE_WATCH_ENV</key>
     <string>${escapeXml(paths.envFile)}</string>
     <key>MONITOR_AGENT_STATUS_FILE</key>
     <string>${escapeXml(paths.agentStatusFile)}</string>
@@ -142,7 +142,7 @@ export async function runCli(argv = process.argv.slice(2), deps = {}) {
     if (portInUse) {
       io.log(`Baize Watch monitor is already running on port ${port}.`);
       io.log(`Browser preview: http://localhost:${port}`);
-      io.log("Use `stopwatch-monitor restart` to reload the background service.");
+      io.log("Use `baize-watch restart` to reload the background service.");
       return 0;
     }
     await (deps.importServer || importServer)();
@@ -224,7 +224,7 @@ async function uninstallService({ paths, run, platform, io }) {
 }
 
 async function loadRuntimeEnv(paths) {
-  await loadEnvFile(process.env.STOPWATCH_MONITOR_ENV || paths.envFile);
+  await loadEnvFile(process.env.BAIZE_WATCH_ENV || paths.envFile);
   await loadEnvFile(path.join(paths.packageRoot, ".env.local"));
   process.env.MONITOR_AGENT_STATUS_FILE ||= paths.agentStatusFile;
 }
@@ -302,12 +302,12 @@ function helpText() {
   return `Baize Watch monitor
 
 Usage:
-  stopwatch-monitor start       Run the desktop monitor in the foreground
-  stopwatch-monitor install     Install and start the macOS background service
-  stopwatch-monitor restart     Restart the background service
-  stopwatch-monitor stop        Stop the background service
-  stopwatch-monitor status      Print launchd service status
-  stopwatch-monitor logs        Print log file paths
-  stopwatch-monitor uninstall   Remove the background service
+  baize-watch start       Run the desktop monitor in the foreground
+  baize-watch install     Install and start the macOS background service
+  baize-watch restart     Restart the background service
+  baize-watch stop        Stop the background service
+  baize-watch status      Print launchd service status
+  baize-watch logs        Print log file paths
+  baize-watch uninstall   Remove the background service
 `;
 }

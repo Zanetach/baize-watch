@@ -125,7 +125,7 @@ test("aliyun provider supports Qwen3 ASR Flash realtime websocket protocol", asy
   ]);
   const text = await transcribe(wav, { sampleRate: 16000 });
 
-  assert.equal(text, "继续优化 StopWatch 语音输入");
+  assert.equal(text, "继续优化 Baize Watch 语音输入");
   assert.equal(FakeQwenWebSocket.instances.length, 1);
   const ws = FakeQwenWebSocket.instances[0];
   assert.equal(ws.url, "wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=qwen3-asr-flash-realtime");
@@ -433,7 +433,7 @@ class FakeQwenWebSocket extends EventEmitter {
       queueMicrotask(() => {
         this.emit("message", JSON.stringify({
           type: "conversation.item.input_audio_transcription.completed",
-          transcript: "继续优化 StopWatch 语音输入"
+          transcript: "继续优化 Baize Watch 语音输入"
         }));
         this.emit("message", JSON.stringify({ type: "session.finished" }));
       });

@@ -76,10 +76,10 @@
   <g font-family="Inter, Arial, sans-serif">
     <text x="664" y="164" fill="#F8FAFC" font-size="44" font-weight="850">Baize Watch</text>
     <text x="668" y="214" fill="#CBD5E1" font-size="23">AI agent status and voice terminal</text>
-    <text x="668" y="248" fill="#CBD5E1" font-size="23">for Codex / Claude on M5Stack StopWatch.</text>
+    <text x="668" y="248" fill="#CBD5E1" font-size="23">for Codex / Claude on Baize Watch.</text>
 
     <rect x="668" y="304" width="452" height="62" rx="16" fill="#0F172A" stroke="#334155"/>
-    <text x="698" y="342" fill="#93C5FD" font-size="24" font-weight="800">npx github:Zanetach/stopwatch install</text>
+    <text x="698" y="342" fill="#93C5FD" font-size="24" font-weight="800">npx github:Zanetach/baize-watch install</text>
 
     <g fill="#0F172A" stroke="#334155">
       <rect x="668" y="408" width="166" height="78" rx="18"/>

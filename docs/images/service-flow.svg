@@ -28,7 +28,7 @@
   </g>
 
   <g font-family="Inter, Arial, sans-serif">
-    <text x="179" y="178" text-anchor="middle" fill="#F8FAFC" font-size="26" font-weight="850">StopWatch</text>
+    <text x="179" y="178" text-anchor="middle" fill="#F8FAFC" font-size="26" font-weight="850">Baize Watch</text>
     <text x="179" y="218" text-anchor="middle" fill="#CBD5E1" font-size="18">ESP32-S3 firmware</text>
     <text x="179" y="248" text-anchor="middle" fill="#CBD5E1" font-size="18">round AMOLED UI</text>
     <text x="179" y="278" text-anchor="middle" fill="#CBD5E1" font-size="18">mic + speaker</text>
@@ -68,6 +68,6 @@
   </g>
 
   <g font-family="Inter, Arial, sans-serif">
-    <text x="640" y="456" text-anchor="middle" fill="#94A3B8" font-size="18">LAN discovery: StopWatch broadcasts on UDP 8788, the desktop service replies with the current WebSocket URL.</text>
+    <text x="640" y="456" text-anchor="middle" fill="#94A3B8" font-size="18">LAN discovery: Baize Watch broadcasts on UDP 8788, the desktop service replies with the current WebSocket URL.</text>
   </g>
 </svg>

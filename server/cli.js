@@ -140,7 +140,7 @@ export async function runCli(argv = process.argv.slice(2), deps = {}) {
       ? await (deps.isPortListening || isTcpPortListening)(port)
       : false;
     if (portInUse) {
-      io.log(`StopWatch desktop monitor is already running on port ${port}.`);
+      io.log(`Baize Watch monitor is already running on port ${port}.`);
       io.log(`Browser preview: http://localhost:${port}`);
       io.log("Use `stopwatch-monitor restart` to reload the background service.");
       return 0;
@@ -299,7 +299,7 @@ function escapeXml(value) {
 }
 
 function helpText() {
-  return `StopWatch desktop monitor
+  return `Baize Watch monitor
 
 Usage:
   stopwatch-monitor start       Run the desktop monitor in the foreground

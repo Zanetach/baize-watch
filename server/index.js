@@ -211,7 +211,7 @@ setInterval(async () => {
 
 server.listen(port, "0.0.0.0", () => {
   const addresses = getLocalAddresses();
-  console.log(`StopWatch desktop monitor listening on port ${port}`);
+  console.log(`Baize Watch monitor listening on port ${port}`);
   console.log(`Browser preview: http://localhost:${port}`);
   for (const address of addresses) {
     console.log(`Device WebSocket: ws://${address}:${port}/device`);
@@ -1303,7 +1303,7 @@ function renderDashboard() {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>StopWatch Monitor</title>
+  <title>Baize Watch</title>
   <style>
     :root { color-scheme: dark; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #101318; color: #f4f7fb; }
@@ -1321,7 +1321,7 @@ function renderDashboard() {
 </head>
 <body>
   <main>
-    <h1>StopWatch Monitor</h1>
+    <h1>Baize Watch</h1>
     <section class="grid">
       <div class="card"><div class="label">CPU</div><div class="value" id="cpu">--%</div></div>
       <div class="card"><div class="label">Memory</div><div class="value" id="mem">--%</div></div>

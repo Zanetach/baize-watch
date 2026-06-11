@@ -1,10 +1,10 @@
-# StopWatch Desktop Monitor
+# Baize Watch
 
 <p align="center">
-  <img src="docs/images/readme-hero.svg" alt="StopWatch Desktop Monitor dashboard preview" width="100%">
+  <img src="docs/images/readme-hero.svg" alt="Baize Watch dashboard preview" width="100%">
 </p>
 
-Turn an M5Stack StopWatch into a local desktop companion for Codex and Claude Code. The project combines an ESP32-S3 firmware UI, a Node.js macOS service, local token readers, LAN discovery, speech recognition, text insertion, and StopWatch speaker playback.
+Baize Watch turns an M5Stack StopWatch into a local desktop companion for Codex and Claude Code. The project combines an ESP32-S3 firmware UI, a Node.js macOS service, local token readers, LAN discovery, speech recognition, text insertion, and device speaker playback.
 
 The core idea is deliberately local-first: the device talks to your Mac over LAN, the Mac reads local Codex / Claude Code state when available, and voice dictation is pasted into the currently focused desktop input.
 
@@ -23,7 +23,7 @@ The core idea is deliberately local-first: the device talks to your Mac over LAN
 ## System Shape
 
 <p align="center">
-  <img src="docs/images/service-flow.svg" alt="StopWatch Desktop Monitor architecture diagram" width="100%">
+  <img src="docs/images/service-flow.svg" alt="Baize Watch architecture diagram" width="100%">
 </p>
 
 The project is split into a narrow firmware surface and a richer desktop runtime:
@@ -61,7 +61,7 @@ Open the browser dashboard:
 http://localhost:8787
 ```
 
-The desktop service also answers StopWatch LAN discovery on UDP `8788`, so the firmware can discover the current Mac LAN address after the device has been flashed once.
+The desktop service also answers Baize Watch LAN discovery on UDP `8788`, so the firmware can discover the current Mac LAN address after the device has been flashed once.
 
 ## Background Service
 
@@ -91,12 +91,12 @@ The npm package is not published yet. The current install surface is the npm-sty
 
 ## Voice Modes
 
-The StopWatch has two voice workflows. They are intentionally separate so casual conversation does not accidentally paste text into a work chat.
+Baize Watch has two voice workflows. They are intentionally separate so casual conversation does not accidentally paste text into a work chat.
 
 | Mode | Entry | Behavior |
 |---|---|---|
 | Dictation/input | Double-press left | Record one instruction, transcribe Chinese, normalize command text, paste into the focused Codex, Claude Code, Terminal, WeChat, Feishu, or other chat input, then wait for right-button send |
-| Conversation assistant | Double-press right | Speak `我是傻妞，你的智能秘书。`, listen, transcribe, reply through the StopWatch speaker, show thinking state while the model/TTS is working, then resume listening |
+| Conversation assistant | Double-press right | Speak `我是傻妞，你的智能秘书。`, listen, transcribe, reply through the device speaker, show thinking state while the model/TTS is working, then resume listening |
 
 Button behavior on the dashboard:
 
@@ -274,13 +274,13 @@ The configuration screen includes Device WS reconnect, on-device Wi-Fi setup, fa
 | `/status` | Current desktop and agent status JSON |
 | `/voice` | Voice controller state and active STT provider |
 | `/speak` | Test or trigger device speech playback |
-| `/device` | StopWatch WebSocket endpoint |
+| `/device` | Baize Watch WebSocket endpoint |
 | `/client` | Browser/client WebSocket endpoint |
 | `/logos/*` | Codex and Claude Code logo assets |
 
 | UDP | Purpose |
 |---|---|
-| `8788` | StopWatch LAN discovery responder |
+| `8788` | Baize Watch LAN discovery responder |
 
 ## Development
 
@@ -333,7 +333,7 @@ The logos remain trademarks of their respective owners. Keep them as product ide
 
 ## Notes
 
-- The desktop service must be reachable from the StopWatch over the same LAN.
+- The desktop service must be reachable from the Baize Watch device over the same LAN.
 - macOS may ask for firewall and Accessibility permissions.
 - `firmware/include/secrets.h`, `.env.local`, and runtime status files are intentionally ignored.
 - No Homebrew formula is included yet.

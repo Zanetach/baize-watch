@@ -1,8 +1,8 @@
 {
-  "name": "stopwatch-desktop-monitor",
+  "name": "baize-watch",
   "version": "0.1.0",
   "private": false,
-  "description": "Desktop status monitor service for the M5Stack StopWatch.",
+  "description": "Local AI agent status and voice companion for the M5Stack StopWatch.",
   "type": "module",
   "bin": {
     "stopwatch-monitor": "bin/stopwatch-monitor.js"

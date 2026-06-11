@@ -28,3 +28,17 @@ test("discovery response includes the current device websocket url", () => {
     wsUrl: "ws://192.168.5.36:8787/device"
   });
 });
+
+test("discovery response can preserve the legacy response type during migration", () => {
+  const response = buildDiscoveryResponse({
+    remoteAddress: "192.168.5.88",
+    addresses: ["192.168.5.36"],
+    port: 8787,
+    type: "stopwatch_monitor"
+  });
+
+  assert.deepEqual(response, {
+    type: "stopwatch_monitor",
+    wsUrl: "ws://192.168.5.36:8787/device"
+  });
+});

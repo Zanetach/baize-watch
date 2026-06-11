@@ -3,6 +3,8 @@ import os from "node:os";
 
 export const DISCOVERY_REQUEST = "baize-watch-discover-v1";
 export const DISCOVERY_RESPONSE_TYPE = "baize_watch";
+export const LEGACY_DISCOVERY_REQUEST = "stopwatch-monitor-discover-v1";
+export const LEGACY_DISCOVERY_RESPONSE_TYPE = "stopwatch_monitor";
 
 export function getLocalAddresses(networkInterfaces = os.networkInterfaces()) {
   const addresses = [];
@@ -25,10 +27,15 @@ export function chooseLanAddressForRemote(remoteAddress, addresses = getLocalAdd
   return addresses[0] || "127.0.0.1";
 }
 
-export function buildDiscoveryResponse({ remoteAddress, addresses = getLocalAddresses(), port }) {
+export function buildDiscoveryResponse({
+  remoteAddress,
+  addresses = getLocalAddresses(),
+  port,
+  type = DISCOVERY_RESPONSE_TYPE
+}) {
   const address = chooseLanAddressForRemote(remoteAddress, addresses);
   return {
-    type: DISCOVERY_RESPONSE_TYPE,
+    type,
     wsUrl: `ws://${address}:${port}/device`
   };
 }
@@ -41,12 +48,15 @@ export function createDiscoveryResponder({
   logger = console
 } = {}) {
   socket.on("message", (message, remote) => {
-    if (message.toString("utf8").trim() !== DISCOVERY_REQUEST) return;
+    const request = message.toString("utf8").trim();
+    const responseType = responseTypeForRequest(request);
+    if (!responseType) return;
 
     const response = buildDiscoveryResponse({
       remoteAddress: remote.address,
       addresses: getAddresses(),
-      port: monitorPort
+      port: monitorPort,
+      type: responseType
     });
     const payload = Buffer.from(JSON.stringify(response));
     socket.send(payload, remote.port, remote.address, (error) => {
@@ -75,6 +85,12 @@ export function createDiscoveryResponder({
       socket.close();
     }
   };
+}
+
+function responseTypeForRequest(request) {
+  if (request === DISCOVERY_REQUEST) return DISCOVERY_RESPONSE_TYPE;
+  if (request === LEGACY_DISCOVERY_REQUEST) return LEGACY_DISCOVERY_RESPONSE_TYPE;
+  return "";
 }
 
 function ipv4Prefix(address) {

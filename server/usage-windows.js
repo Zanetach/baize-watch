@@ -6,6 +6,35 @@ export function buildCodexUsageWindows(rateLimits, options = {}) {
   ].filter(Boolean);
 }
 
+export function buildRollingUsageWindows({
+  primaryUsed,
+  primaryLimit,
+  primaryWindowMinutes = 300,
+  primaryLabel = null,
+  secondaryUsed,
+  secondaryLimit,
+  secondaryWindowMinutes = 10080,
+  secondaryLabel = "7d",
+  resetText = "roll"
+} = {}) {
+  return [
+    buildRollingUsageWindow("primary", {
+      used: primaryUsed,
+      limit: primaryLimit,
+      windowMinutes: primaryWindowMinutes,
+      label: primaryLabel,
+      resetText
+    }),
+    buildRollingUsageWindow("secondary", {
+      used: secondaryUsed,
+      limit: secondaryLimit,
+      windowMinutes: secondaryWindowMinutes,
+      label: secondaryLabel,
+      resetText
+    })
+  ].filter(Boolean);
+}
+
 export function buildCodexUsageWindow(kind, limit, options = {}) {
   const usedPercent = numberOrNull(limit?.used_percent);
   if (usedPercent === null) return null;
@@ -21,6 +50,27 @@ export function buildCodexUsageWindow(kind, limit, options = {}) {
     remainingPercent: clampPercent(100 - usedPercent),
     resetAt: timestampFromSeconds(resetsAt),
     resetText: formatResetTextForWindow(resetsAt, { ...options, kind, windowMinutes })
+  };
+}
+
+function buildRollingUsageWindow(kind, {
+  used,
+  limit,
+  windowMinutes,
+  label,
+  resetText
+} = {}) {
+  const usedPercent = percentFromTokens(used, limit);
+  if (usedPercent === null) return null;
+
+  return {
+    kind,
+    label: label || formatWindowLabel(windowMinutes, kind),
+    windowMinutes: numberOrNull(windowMinutes),
+    usedPercent,
+    remainingPercent: usedPercent,
+    resetAt: null,
+    resetText
   };
 }
 
@@ -85,6 +135,13 @@ function numberOrNull(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function percentFromTokens(used, limit) {
+  const tokenCount = numberOrNull(used);
+  const tokenLimit = numberOrNull(limit);
+  if (tokenCount === null || !tokenLimit) return null;
+  return clampPercent((tokenCount / tokenLimit) * 100);
 }
 
 function clampPercent(value) {

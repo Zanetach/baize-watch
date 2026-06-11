@@ -32,7 +32,7 @@ import {
   createDoubaoTtsSynthesizer
 } from "./tts.js";
 import { createSingleFlightTtlCache } from "./status-cache.js";
-import { buildCodexUsageWindows } from "./usage-windows.js";
+import { buildCodexUsageWindows, buildRollingUsageWindows } from "./usage-windows.js";
 import { agentFreshness } from "./agent-freshness.js";
 import { activationNameForTargetApp, buildPasteScript } from "./app-targets.js";
 import {
@@ -970,6 +970,13 @@ async function readClaudeTokenStatus() {
     if (!newest) return {};
     const latestUsed = newest.input + newest.output + newest.cacheCreation + newest.cacheRead;
     const usageUsed = sumTokenPoints(usagePoints);
+    const usageWindows = buildRollingUsageWindows({
+      primaryUsed: usageUsed,
+      primaryLimit: claudeTokenLimit,
+      secondaryUsed: weeklyUsed,
+      secondaryLimit: claudeWeeklyTokenLimit
+    });
+
     return {
       state: "online",
       task: newest.cwd ? shortPath(newest.cwd) : "",
@@ -988,6 +995,7 @@ async function readClaudeTokenStatus() {
           points: weeklyPoints
         }, weeklyUsed, trendBucketCount)
       },
+      usageWindows,
       updatedAt: new Date(newest.timestampMs).toISOString()
     };
   } catch {

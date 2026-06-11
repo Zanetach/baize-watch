@@ -955,33 +955,37 @@ async function readClaudeTokenStatus() {
       }
     }
 
-    if (!newest) return {};
-    const used = newest.input + newest.output + newest.cacheCreation + newest.cacheRead;
     const nowMs = Date.now();
+    const usagePoints = bucketTokenTrend(trendEvents, {
+      nowMs,
+      windowMs: usageTrendWindowMs,
+      bucketCount: trendBucketCount
+    });
+    const weeklyPoints = bucketTokenTrend(trendEvents, {
+      nowMs,
+      windowMs: weeklyTrendWindowMs,
+      bucketCount: trendBucketCount
+    });
+
+    if (!newest) return {};
+    const latestUsed = newest.input + newest.output + newest.cacheCreation + newest.cacheRead;
+    const usageUsed = sumTokenPoints(usagePoints);
     return {
       state: "online",
       task: newest.cwd ? shortPath(newest.cwd) : "",
       progress: percentFromTokens(weeklyUsed, claudeWeeklyTokenLimit),
       tokens: {
-        used,
+        used: usageUsed || latestUsed,
         limit: claudeTokenLimit
       },
       trends: {
         usage: normalizeTokenTrend({
-          total: used,
-          points: bucketTokenTrend(trendEvents, {
-            nowMs,
-            windowMs: usageTrendWindowMs,
-            bucketCount: trendBucketCount
-          })
-        }, used, trendBucketCount),
+          total: usageUsed,
+          points: usagePoints
+        }, usageUsed, trendBucketCount),
         weekly: normalizeTokenTrend({
           total: weeklyUsed,
-          points: bucketTokenTrend(trendEvents, {
-            nowMs,
-            windowMs: weeklyTrendWindowMs,
-            bucketCount: trendBucketCount
-          })
+          points: weeklyPoints
         }, weeklyUsed, trendBucketCount)
       },
       updatedAt: new Date(newest.timestampMs).toISOString()
@@ -989,6 +993,10 @@ async function readClaudeTokenStatus() {
   } catch {
     return {};
   }
+}
+
+function sumTokenPoints(points) {
+  return (points || []).reduce((sum, value) => sum + numberOrZero(value), 0);
 }
 
 async function detectAgentProcesses() {
